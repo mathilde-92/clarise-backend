@@ -182,13 +182,22 @@ app.post("/api/analyse", async (req, res) => {
 // ============================================================
 app.post("/api/coach", async (req, res) => {
   try {
-    const { messages } = req.body || {};
+    const { messages, journalNotes } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "Historique manquant." });
     }
+    // Si l'app transmet des notes du journal, on les ajoute au contexte de
+    // Clarisse (limitées en taille), pour qu'elle puisse en tenir compte
+    // quand la personne parle des mêmes personnes ou situations.
+    let sys = SYS_COACH;
+    if (journalNotes && String(journalNotes).trim()) {
+      sys += "\n\n# Notes récentes du journal de la personne (contexte)\n"
+        + "Voici des notes de son journal. Si elle te parle d'une personne ou d'une situation qui y figure, tu peux t'y référer avec douceur (ex. « ce n'est pas la première fois que Marc t'écrit ce genre de message »). Ne récite pas ces notes mécaniquement et n'en parle que si c'est pertinent :\n"
+        + String(journalNotes).slice(0, 4000);
+    }
     // messages attendu : [{ role: "user"|"assistant", content: "..." }, ...]
     const reply = await callInfomaniak([
-      { role: "system", content: SYS_COACH },
+      { role: "system", content: sys },
       ...messages,
     ]);
     res.json({ reply });
