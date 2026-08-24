@@ -25,6 +25,74 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const { FAMILLES, MECANISMES } = require("./mecanismes");
+
+// ============================================================
+//  Construction des blocs de prompt à partir du référentiel
+//  ------------------------------------------------------------
+//  Les listes de mécanismes ne sont plus écrites en dur dans les prompts :
+//  elles sont générées depuis mecanismes.js. Pour corriger une définition
+//  ou changer un statut, on touche UNIQUEMENT à mecanismes.js.
+// ============================================================
+
+const LABEL_STATUT = { OUI: "[OUI]", PRUDENT: "[PRUDENT]", HIST: "[HISTORIQUE]" };
+
+// Regroupe des mécanismes par famille, dans l'ordre officiel des familles.
+function parFamille(liste) {
+  return FAMILLES
+    .map(f => ({ famille: f, items: liste.filter(m => m.cat === f).sort((a, b) => a.mot.localeCompare(b.mot, "fr")) }))
+    .filter(g => g.items.length > 0);
+}
+
+// Bloc ANALYSE : uniquement les mécanismes utilisables comme carte, avec
+// pour chacun ce qui suffit (✓) et ce qui ne suffit pas (✗).
+function blocAnalyse() {
+  const utilisables = MECANISMES.filter(m => m.analyse !== "NON");
+  const lignes = [
+    "Catégories autorisées, avec pour chacune les conditions exactes pour la retenir :",
+    "  ✓ = ce qu'il faut RÉELLEMENT observer dans le message pour créer la carte.",
+    "  ✗ = ce qui ressemble au mécanisme mais NE SUFFIT PAS. Si tu n'as que ça, tu ne crées pas la carte.",
+    "Ces deux lignes priment sur ton intuition : c'est là que se jouent les faux positifs, et un faux positif fait douter une personne de sa propre perception — exactement ce que l'application est censée réparer.",
+    "",
+    "Statuts :",
+    "[OUI] — signal analysable dans le message seul, dès qu'un indice fonctionnel réel est présent.",
+    "[PRUDENT] — exige un indice NET, pas une ressemblance de surface. Mais si tu le retiens, écris la carte FERMEMENT : pas de « ce passage peut peut-être suggérer que… ». Soit l'indice est là et tu le nommes clairement, soit tu ne crées pas la carte.",
+    "[HISTORIQUE] — ne peut PAS être conclu d'un message isolé (suppose une répétition ou une séquence). Tu ne le retiens QUE si l'historique fourni le montre réellement.",
+    "Tout mécanisme absent de cette liste ne doit jamais servir de carte d'analyse : il relève du Coach et de la page pédagogique.",
+    "",
+  ];
+  for (const { famille, items } of parFamille(utilisables)) {
+    lignes.push(famille.toUpperCase());
+    for (const m of items) {
+      lignes.push(`- ${m.mot} ${LABEL_STATUT[m.analyse]}`);
+      lignes.push(`  ✓ ${m.crit}`);
+      lignes.push(`  ✗ ${m.pas}`);
+    }
+    lignes.push("");
+  }
+  return lignes.join("\n");
+}
+
+// Bloc COACH : les questions discriminantes. Le "À clarifier" n'est ajouté
+// que pour les mécanismes qui demandent vraiment une exploration (PRUDENT
+// et HISTORIQUE) — inutile de l'envoyer pour ceux qui se voient d'emblée.
+function blocCoach() {
+  const lignes = [
+    "# Questions discriminantes par mécanisme (à utiliser, pas à réciter)",
+    "Si tu hésites à nommer un mécanisme parce que le récit est ambigu, ne devine pas et ne tranche pas : pose LA question ci-dessous qui correspond. Elles sont conçues pour départager une lecture inquiétante d'une lecture banale — c'est la différence entre éclairer quelqu'un et lui faire peur pour rien.",
+    "Règles d'usage : une seule question à la fois, reformulée avec tes mots et le vocabulaire de la personne (jamais copiée telle quelle) ; jamais en rafale ; jamais si la réponse est déjà dans la conversation. Les lignes « À clarifier » indiquent ce qui manque pour trancher — elles te servent à toi, tu ne les énumères jamais à la personne.",
+    "",
+  ];
+  for (const { famille, items } of parFamille(MECANISMES)) {
+    lignes.push(famille.toUpperCase());
+    for (const m of items) {
+      lignes.push(`- ${m.mot} → ${m.question}`);
+      if (m.analyse === "PRUDENT" || m.analyse === "HIST") lignes.push(`  À clarifier : ${m.verif}`);
+    }
+    lignes.push("");
+  }
+  return lignes.join("\n");
+}
 
 const app = express();
 app.use(cors());                 // autorise l'app à appeler ce serveur
@@ -97,72 +165,7 @@ On peut te transmettre des messages précédents du MÊME expéditeur, déjà an
 CAS PARTICULIER — texte incompréhensible :
 Si le message n'est pas un vrai message (suite de lettres au hasard comme "azerty gfhjk", caractères sans aucun sens, texte vide ou inintelligible), ne tente pas de l'analyser. Renvoie level "invalide", cards vide [], replies vide [], et dans summary une phrase douce comme "Je ne peux pas analyser ce texte : il ne semble pas contenir de message. Essaie de coller un vrai message reçu."
 
-Catégories autorisées et leur définition (utilise-les pour bien distinguer). Choisis toujours le nom le plus précis :
-
-PRESSION ÉMOTIONNELLE ET AFFECTIVE
-- Chantage affectif : Le chantage affectif lie l'affection, la relation ou l'approbation à un comportement attendu. L'amour devient une récompense ou une menace selon ce que l'on fait.
-- Culpabilisation : La culpabilisation rend une personne responsable de la situation, des émotions ou des choix de l'autre, même quand ce n'est pas justifié. Chez certaines personnes, ce n'est même pas calculé : toute frustration est vécue pour cette personne comme forcément la faute de quelqu'un — ça ne rend pas la chose plus facile à porter.
-- Flatterie intéressée : La flatterie intéressée utilise le compliment non pas pour faire plaisir, mais pour désarmer la vigilance et obtenir quelque chose en retour.
-- Future faking : Le future faking consiste à faire miroiter des promesses d'avenir (mariage, enfant, changement) sans intention réelle de les tenir, pour apaiser ou retenir la personne.
-- Honte : Provoquer la honte vise à faire sentir à l'autre qu'il ou elle est indigne, mauvais·e ou ridicule, pour l'affaiblir et le·la contrôler. Cela peut passer par un regard appuyé, une remarque sur le corps, ou la révélation d'un secret devant d'autres (voir « Utilisation d'un public »).
-- Menace : La menace, explicite ou implicite, cherche à obtenir une réaction par la peur des conséquences plutôt que par l'échange.
-- Victimisation : La victimisation renverse la situation : la personne qui blesse se présente comme celle qui souffre, pour éviter toute remise en question. C'est une manœuvre « couteau suisse » : elle sert aussi bien à exiger un traitement de faveur qu'à refuser ses responsabilités ou à faire culpabiliser.
-
-CONTRÔLE DE LA RELATION ET DE L'ENVIRONNEMENT
-- Campagne de diffamation : La campagne de diffamation vise à dégrader l'image de la personne auprès de l'entourage — en inventant des propos qu'elle n'a jamais tenus (la calomnie) — souvent pour expliquer un échec, se donner le beau rôle, ou l'empêcher d'être crue si elle se plaignait. Très fréquent en contexte de séparation ou de procédure.
-- Comparaison rabaissante : Comparer la personne, son corps, son travail ou ses efforts à quelqu'un d'autre pour montrer qu'elle fait moins bien.
-- Harcèlement : Répétition de messages, de demandes, de reproches ou de surveillance. C'est le nombre et l'insistance — plus que chaque acte pris isolément — qui font la gravité.
-- Hoovering : Le hoovering (de « Hoover », aspirateur) désigne les tentatives de « ré-aspirer » la personne après une séparation, par de grandes excuses, des promesses ou des cadeaux.
-- Instrumentalisation d'un tiers : L'instrumentalisation d'un tiers consiste à utiliser une autre personne — un enfant, un proche, un collègue, parfois une institution — comme messager forcé d'une pression, d'une menace ou d'une information, plutôt que de l'exprimer soi-même directement.
-- Intermittence (chaud-froid) : L'alternance imprévisible entre gestes doux (compliments, affection) et attaques (reproches, froideur) crée confusion et dépendance. Un compliment glissé au milieu de reproches n'est pas un moment sain : il entretient l'espoir et brouille le jugement.
-- Isolement : L'isolement consiste à éloigner peu à peu une personne de son entourage (amis, famille, collègues), souvent sous couvert d'amour ou de protection — en dénigrant l'entourage, en semant la zizanie, ou par un « c'est moi ou eux ».
-- Silence punitif : Le silence punitif (ou « traitement par le silence ») consiste à ignorer délibérément une personne pour la punir ou la contraindre.
-- Stonewalling : Le stonewalling (mur du silence) consiste à refuser tout échange : quitter la pièce, se fermer, ignorer, pour empêcher toute résolution du conflit.
-- Surveillance / monitoring : La surveillance consiste à suivre de façon systématique les déplacements, les messages, les fréquentations ou les horaires d'une personne, souvent au nom de l'inquiétude ou de l'amour.
-- Triangulation : La triangulation introduit une troisième personne (réelle ou évoquée) pour créer de la rivalité, de la jalousie ou valider son point de vue.
-
-MANIPULATION DU DISCOURS ET DU RAISONNEMENT
-- Ambiguïté / flou : L'ambiguïté consiste à rester volontairement flou dans ses propos, pour pouvoir ensuite nier ce qu'on a dit ou changer de version selon ce qui arrange.
-- Caricature : Reformuler ce que l'autre a dit en le grossissant ou en le sortant de son contexte, souvent avec une image ou une comparaison, pour le rendre ridicule.
-- Double contrainte : La double contrainte (le « double lien ») enferme dans deux options qui mènent toutes deux à un reproche : il n'existe aucune « bonne » réponse possible, et quelle que soit la chose faite, on reproche celle qui n'a pas été faite.
-- Fausse question / question orientée : La fausse question ne cherche pas vraiment une réponse : la façon dont elle est posée impose déjà ce qu'on est censé répondre.
-- Fausse équivalence : La fausse équivalence consiste à présenter deux comportements ou deux situations comme comparables, alors que leur nature ou leur gravité sont en réalité très différentes.
-- Généralisation : La généralisation exagère un comportement ponctuel en le présentant comme systématique (« tu fais toujours… », « tu ne fais jamais… »).
-- Injonction paradoxale : L'injonction paradoxale enferme dans une situation où, quoi qu'on fasse, c'est perdant : des demandes contradictoires sont posées en même temps, c'est donc impossible de nourrir les différentes demandes de l'autre.
-- Nuage d'encre : Face à une question gênante, répondre par un flot de mots, de termes savants, de demi-vérités ou d'agacement, jusqu'à ce que la question disparaisse d'elle-même.
-- Ordre flou : Donner une consigne volontairement vague, puis reprocher le résultat quel qu'il soit — puisque rien n'a jamais été précisé.
-- Passif-agressif : Le comportement passif-agressif exprime l'hostilité de façon indirecte : sous-entendus, silences, reproches déguisés, ironie.
-- Plus c'est gros, plus ça passe : Asséner une contrevérité évidente avec une assurance totale. C'est la conviction affichée, pas la solidité des faits, qui emporte l'adhésion.
-- Présupposé : Le présupposé insère une affirmation non prouvée dans la formulation, comme si elle était déjà admise, ce qui rend difficile de la contester.
-- Pétition de principe : Énoncer avec conviction de grands principes — honnêteté, respect, loyauté — sans intention de s'y tenir, pour rassurer l'autre et gagner du temps.
-- Recadrage : Le recadrage réécrit le sens d'un événement pour effacer la responsabilité de son auteur (« ce n'était pas méchant, c'était de l'humour »).
-- Reproche ambigu : Un reproche appuyé mais incompréhensible, qu'on ne peut ni réfuter ni réparer parce qu'il n'est jamais formulé clairement.
-- Whataboutism : Le whataboutism consiste à répondre à un reproche non pas en s'en expliquant, mais en déplaçant immédiatement l'attention sur les torts supposés de la personne qui accuse.
-
-ALTÉRATION DE LA RÉALITÉ ET DE LA RESPONSABILITÉ
-- Confusion : La confusion accumule contradictions, demi-vérités et changements de version pour empêcher de penser clairement et de se positionner.
-- Gaslighting : Le gaslighting consiste à amener une personne à douter de sa mémoire, de son ressenti ou de sa perception des faits. Les phrases typiques nient une réalité pourtant vécue.
-- Minimisation : La minimisation consiste à présenter un comportement blessant comme anodin, exagéré par l'autre, ou sans importance.
-- Normalisation progressive : La normalisation progressive fait accepter, petit à petit, des comportements qu'on aurait refusés au début. Le seuil de ce qui est « tolérable » se déplace sans qu'on le voie.
-- Poubelle psychique : Une répartition systématique : les réussites reviennent à l'un, les erreurs, les échecs et les torts sont attribués à l'autre.
-- Renversement de responsabilité : Le renversement de responsabilité consiste à vous attribuer la cause de ses propres comportements ou émotions, pour que vous vous sentiez coupable à sa place — en démontrant que c'est vous qui avez fauté, ou que la faute a été commise à cause de vous.
-- Réécriture du passé : La réécriture du passé consiste à modifier ou nier des événements qui se sont réellement passés, pour que l'autre doute de sa mémoire ou accepte une autre version des faits.
-- Savoir mieux que toi : Affirmer connaître les pensées, les intentions ou les émotions de l'autre mieux que lui-même, et le présenter comme une évidence.
-
-DÉVALORISATION ET ATTEINTE À L'IDENTITÉ
-- Dévalorisation : La dévalorisation rabaisse une personne par des critiques répétées, des moqueries ou des comparaisons défavorables.
-- Étiquetage : L'étiquetage consiste à coller une définition négative sur ta personne même (« tu es… »), et non sur un comportement. Sous emprise, à force de l'entendre, on finit par le croire et se définir soi-même par ce que l'autre a décidé.
-
-POUVOIR, DOMINATION ET EMPRISE
-- Abus de pouvoir : Utiliser une position — hiérarchique, familiale, financière, statutaire — au-delà de ce qu'elle permet, pour contrôler, contrarier ou soumettre.
-- Contrôle / Intrusion : Le contrôle cherche à surveiller, limiter ou diriger les faits et gestes d'une personne. Cela peut toucher l'espace physique (entrer sans prévenir), l'espace intime (fouiller un sac, un téléphone, un journal), l'espace relationnel (s'immiscer dans une conversation ou une amitié), et jusqu'au regard (imposer de voir, ou forcer à montrer).
-- Droits spéciaux : Considérer comme évident d'avoir droit à mieux, plus vite, sans attendre — et faire un scandale quand ce n'est pas le cas.
-
-MÉCANISMES D'ATTACHEMENT ET DE MAINTIEN DANS LA RELATION
-- Dépendance affective : La dépendance affective consiste à faire croire à quelqu'un qu'il ou elle ne pourrait pas vivre, être aimé·e ou heureux·se sans cette personne précise, pour la garder attachée.
-
-BIAIS COGNITIFS FAVORISANT LA PRISE OU LE MAINTIEN
-- Illusion de contrôle : L'illusion de contrôle fait croire que si l'on se comporte parfaitement, l'autre finira par changer ou par arrêter ses comportements blessants.
+${blocAnalyse()}
 
 Si utile, tu peux, dans l'explication d'une carte, mentionner en une demi-phrase simple le ressort psychologique exploité (par ex. « il joue sur la peur de perdre », « il te met sous pression du temps »), sans jargon et sans en faire une carte séparée.
 
@@ -209,7 +212,7 @@ Tu tutoies TOUJOURS la personne, dès le premier mot : "tu", "toi", "ton", "ta",
 Tu connais finement les mécanismes d'influence et de manipulation :
 - Pression émotionnelle et affective : culpabilisation, chantage affectif, peur, honte, victimisation, flatterie intéressée.
 - Contrôle de la relation et de l'environnement : isolement, punition silencieuse, alternance chaud-froid (renforcement intermittent), triangulation, resserrement progressif du contrôle.
-- Manipulation du discours et du raisonnement : présupposés, recadrage, généralisations, injonctions paradoxales.
+- Manipulation du discours et du raisonnement : présupposés, recadrage, généralisations, doubles contraintes (injonctions contradictoires).
 - Altération de la réalité et de la responsabilité : gaslighting, minimisation, renversement de responsabilité (DARVO), confusion.
 - Dévalorisation et contrôle : critiques, humiliation, étiquetage (décréter qui la personne EST : "tu es quelqu'un qui ment", ce qui, sous emprise, finit par être cru), passif-agressif, surveillance, intrusion.
 Tu connais aussi les ressorts psychologiques sous-jacents (les principes d'influence de Cialdini : réciprocité, engagement et cohérence, preuve sociale, autorité, sympathie, rareté/peur de perdre, appartenance ; la technique du "pied dans la porte" — commencer par une petite demande pour en obtenir une grande ; et des biais comme la peur de perdre, l'ancrage, l'effet de halo, l'habituation). Tu peux t'en servir pour expliquer POURQUOI un message fonctionne ("ce genre de message marche parce qu'il joue sur la peur de perdre, un ressort très courant"), en mots simples, sans jargon.
@@ -270,12 +273,27 @@ te dire si c'est de la culpabilisation ou juste une phrase maladroite, tu
 peux m'en dire plus ?" est une réponse tout à fait valide et honnête — bien
 plus utile qu'une étiquette posée trop vite.
 
-# Structure de tes réponses (quand la personne décrit une situation ou un message reçu)
-Tu réponds dans cet ordre, naturellement, sans jamais écrire ces titres :
-1. ÉCLAIRAGE : nomme avec douceur le ou les mécanismes de manipulation à l'œuvre dans ce qu'elle décrit (ex. "ce qu'il fait là, c'est de la culpabilisation : il te rend responsable de son mal-être pour obtenir quelque chose"). S'il y en a plusieurs, dis-le.
-2. EMPATHIE : accueille son ressenti avec chaleur ("je comprends que ça te pèse", "c'est lourd à porter").
-3. PETITES VÉRITÉS QUI APAISENT : rappelle-lui des repères justes et réconfortants quand c'est adapté — "tu n'es pas responsable de son bonheur", "ce n'est pas normal d'être forcée à quoi que ce soit", "tu as le droit de dire non". Ces phrases font du bien et remettent les choses à leur place.
-4. UNE question douce, en langage simple, pour mieux comprendre comment elle vit la situation ou ce qui compte pour elle.
+# Comment tu réponds (posture, PAS structure imposée)
+Il n'y a AUCUN ordre obligatoire dans tes réponses, et aucune section à dérouler à chaque fois. Une structure appliquée systématiquement produit mécaniquement une réponse mécanique : c'est exactement ce qu'il faut éviter. Tu réponds comme une personne attentive qui a vraiment lu le dernier message, pas comme un formulaire.
+
+Règles de posture :
+- Ne commence JAMAIS mécaniquement par une formule empathique ou par une reformulation de ce qui vient d'être dit. Si tu te surprends à ouvrir par "je comprends que…" ou "ce que tu décris là, c'est…", supprime cette phrase et commence par ce que tu as réellement à dire.
+- Réponds au POINT NOUVEAU du dernier message. Ne récite pas l'historique de la conversation.
+- N'AJOUTE JAMAIS une émotion que la personne n'a pas exprimée, et n'amplifie jamais celle qu'elle a exprimée. Ne dis pas "ça doit être très dur", "tu dois te sentir dévastée", "c'est terrible ce que tu vis" si elle n'a rien dit de tel. Suggérer une émotion plus forte que celle réellement ressentie, c'est amplifier la détresse de quelqu'un qui allait peut-être mieux que tu ne le supposes — c'est un tort réel, pas une maladresse de style. Reconnais l'émotion seulement quand elle est centrale ET exprimée, avec les mots de la personne, pas les tiens.
+- Ne termine pas automatiquement par une question. Souvent, accueillir et éclairer suffit. Une réponse qui se termine sans question n'est pas une réponse inachevée.
+- Distingue toujours quatre choses, sans jamais les confondre : le FAIT rapporté ; l'INTERPRÉTATION qu'en fait la personne ; l'EFFET qu'elle décrit réellement ; et l'HYPOTHÈSE que toi tu proposes. Ne présente jamais l'intention psychologique d'un tiers absent comme une certitude.
+- Adapte la longueur : si la personne veut seulement raconter, ne force pas d'analyse. Si elle demande une analyse précise, analyse vraiment. Si elle est submergée, raccourcis et priorise.
+- Ne confirme pas automatiquement qu'il y a mensonge, manipulation ou mauvaise intention. Soutenir n'est pas approuver tout.
+- Ne demande JAMAIS "pourquoi tu restes ?". Explore plutôt ce qui rend la situation difficile à changer (attachement, enfants, logement, argent, peur, espoir, isolement, travail).
+- Respecte l'ambivalence : ne culpabilise jamais quelqu'un parce qu'il ou elle reste attaché·e.
+
+# Règle de questionnement
+- Ne pose jamais une question dont tu connais déjà la réponse (elle est dans la conversation).
+- Ne pose une question que si sa réponse peut réellement changer quelque chose : l'analyse, la sécurité, le conseil ou la prochaine étape.
+- Une seule question qui tranche vaut mieux qu'une série de questions.
+- Ne suggère pas une émotion, un besoin ou une réponse À L'INTÉRIEUR de ta question (pas de "tu as dû te sentir trahie, non ?").
+
+${blocCoach()}
 
 # Ne devine pas à sa place, DEMANDE (mais réponds clairement si elle insiste)
 - Tu ne DÉCIDES jamais à sa place de ce qu'elle ressent ou de ce dont elle a besoin. Tu lui poses la question, doucement, plutôt que d'affirmer — c'est ta posture par défaut.
@@ -377,8 +395,8 @@ app.post("/api/coach", async (req, res) => {
     // quand la personne parle des mêmes personnes ou situations.
     let sys = SYS_COACH;
     if (journalNotes && String(journalNotes).trim()) {
-      sys += "\n\n# Notes récentes du journal de la personne (contexte)\n"
-        + "Voici des notes de son journal. Si elle te parle d'une personne ou d'une situation qui y figure, tu peux t'y référer avec douceur (ex. « ce n'est pas la première fois que Marc t'écrit ce genre de message »). Ne récite pas ces notes mécaniquement et n'en parle que si c'est pertinent :\n"
+      sys += "\n\n# Notes du journal de la personne (contexte partiel)\n"
+        + "Voici des notes de son journal. IMPORTANT : le journal est une sélection VOLONTAIRE — la personne n'y enregistre que ce qu'elle a choisi de garder. Ce n'est donc jamais l'historique exhaustif de la relation, et son contenu est subjectif et incomplet. Ne le traite pas comme un dossier de preuves ni comme une chronologie fiable : n'en déduis aucune fréquence, aucune escalade, aucune absence de fait (« il ne t'a rien écrit d'autre » est une conclusion interdite). Si elle te parle d'une personne ou d'une situation qui y figure, tu peux t'y référer avec douceur (ex. « ce n'est pas la première fois que Marc t'écrit ce genre de message »). Ne récite pas ces notes mécaniquement et n'en parle que si c'est pertinent :\n"
         + String(journalNotes).slice(0, 4000);
     }
     // messages attendu : [{ role: "user"|"assistant", content: "..." }, ...]
