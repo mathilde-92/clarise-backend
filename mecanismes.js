@@ -203,7 +203,7 @@ const MECANISMES = [
     verif: "Propos exacts ; vérification auprès du tiers ; divergences ; répétition ; bénéfice relationnel." },
   { mot: "Silence punitif", cat: "Contrôle de la relation et de l'environnement", analyse: "PRUDENT",
     crit: "Le retrait de communication survient après un désaccord et fonctionne comme une sanction ou un moyen d’obtenir excuses, soumission ou reprise de contact.",
-    pas: "Prendre de la distance pour se calmer est sain si la pause est annoncée, proportionnée et suivie d’une reprise.",
+    pas: "Prendre de la distance est sain, y compris définitivement : annoncer qu’on met fin au contact, ou qu’on ne répondra plus, parce que la relation fait du mal, est une limite légitime — pas une punition. Ce qui fait la punition, c’est le silence utilisé pour obtenir quelque chose (des excuses, une soumission, une reprise de contact), pas le fait de partir.",
     question: "La personne dit-elle qu’elle a besoin d’une pause et revient-elle ensuite, ou le silence dure-t-il jusqu’à ce que tu cèdes ou t’excuses ?",
     verif: "Durée ; annonce de la pause ; reprise prévue ; motif ; ce qui fait cesser le silence." },
   { mot: "Stonewalling", cat: "Contrôle de la relation et de l'environnement", analyse: "PRUDENT",
