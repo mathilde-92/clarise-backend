@@ -105,20 +105,24 @@ app.use(express.json({ limit: "1mb" }));
 // --- Réglages lus depuis l'environnement (JAMAIS écrits en clair ici) ---
 const TOKEN = process.env.INFOMANIAK_TOKEN;
 const PRODUCT_ID = process.env.INFOMANIAK_PRODUCT_ID;
-// Identifiant exact attendu par l'API Infomaniak (sensible à la casse).
-// Valeur de repli si INFOMANIAK_MODEL n'est pas défini sur l'hébergeur.
-// "mixtral" ne fait plus partie du catalogue Infomaniak : l'appel échouerait.
-const MODEL = process.env.INFOMANIAK_MODEL || "mistralai/Mistral-Small-4-119B-2603";
+// Identifiant attendu par l'API Infomaniak (sensible à la casse).
+// ATTENTION : la liste dépend du PRODUIT Infomaniak souscrit, pas du catalogue
+// public. Ce produit-ci n'accepte que : mistral24b, mistral3, qwen3.
+// Pour connaître la liste à jour, ouvrir /api/sante/ia avec un modèle inconnu :
+// l'erreur renvoyée par Infomaniak énumère les valeurs autorisées.
+const MODEL = process.env.INFOMANIAK_MODEL || "mistral24b";
 
 // URL de l'API d'Infomaniak (compatible OpenAI)
 const API_URL = `https://api.infomaniak.com/1/ai/${PRODUCT_ID}/openai/chat/completions`;
 
 // Petit utilitaire : appelle l'IA d'Infomaniak avec une liste de messages
-async function callInfomaniak(messages, { temperature = 0.7 } = {}) {
+// `model` et `maxTokens` ne servent qu'aux pages de diagnostic, qui essaient
+// un modèle sans redéployer. En usage normal, on prend les valeurs par défaut.
+async function callInfomaniak(messages, { temperature = 0.7, model = MODEL, maxTokens = 1000 } = {}) {
   const body = {
-    model: MODEL,
+    model,
     messages,
-    max_tokens: 1000,
+    max_tokens: maxTokens,
     temperature,
   };
   const res = await fetch(API_URL, {
@@ -623,16 +627,20 @@ app.get("/api/sante", (_req, res) => {
 
 // Test réel de l'appel à Infomaniak, pour distinguer « le serveur est cassé »
 // de « Infomaniak refuse ce modèle ». Renvoie le message d'erreur exact.
-app.get("/api/sante/ia", async (_req, res) => {
+// On peut essayer un autre modèle sans rien redéployer :
+//   /api/sante/ia?modele=qwen3
+// Si le modèle n'est pas accepté, l'erreur d'Infomaniak liste ceux qui le sont.
+app.get("/api/sante/ia", async (req, res) => {
   const debut = Date.now();
+  const modele = String(req.query.modele || MODEL).slice(0, 80);
   try {
     const r = await callInfomaniak(
       [{ role: "user", content: "Réponds exactement : ok" }],
-      { temperature: 0 }
+      { temperature: 0, model: modele, maxTokens: 20 }
     );
-    res.json({ ok: true, modele: MODEL, reponse: r, dureeMs: Date.now() - debut });
+    res.json({ ok: true, modele, reponse: r, dureeMs: Date.now() - debut });
   } catch (e) {
-    res.status(502).json({ ok: false, modele: MODEL, erreur: e.message, dureeMs: Date.now() - debut });
+    res.status(502).json({ ok: false, modele, erreur: e.message, dureeMs: Date.now() - debut });
   }
 });
 
