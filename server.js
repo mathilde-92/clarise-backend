@@ -26,6 +26,11 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { FAMILLES, MECANISMES } = require("./mecanismes");
+// Tout ce que Clarisse a le droit de dire sur le droit, l'argent et les
+// démarches est rassemblé dans ce fichier, pour pouvoir être relu seul.
+const {
+  conversationTouchAuDroit, BLOC_DEMARCHES, blocReperesVerifies,
+} = require("./juridique");
 
 // ============================================================
 //  Construction des blocs de prompt à partir du référentiel
@@ -76,42 +81,8 @@ function blocAnalyse() {
 // Bloc COACH : les questions discriminantes. Le "À clarifier" n'est ajouté
 // que pour les mécanismes qui demandent vraiment une exploration (PRUDENT
 // et HISTORIQUE) — inutile de l'envoyer pour ceux qui se voient d'emblée.
-// Bloc « démarches et repères juridiques ».
-// Il n'est PLUS dans le prompt permanent : présent à chaque échange, il finissait
-// par déteindre sur toutes les réponses (du juridique et du « protège-toi »
-// partout, même pour une chambre mal rangée). Il n'est injecté que lorsque la
-// conversation touche réellement au droit, à l'argent ou à une mise en sécurité.
-const MOTS_JURIDIQUES = [
-  "avocat", "juriste", "juge", "tribunal", "plainte", "porter plainte", "police",
-  "gendarmerie", "procédure", "loi", "légal", "illégal", "droit", "divorce",
-  "séparation", "garde", "pension", "alimentaire", "prestation", "notaire",
-  "huissier", "ordonnance de protection", "main courante", "preuve", "témoignage",
-  "expulser", "expulsion", "bail", "logement", "argent", "verser", "dédommage",
-  "démarche", "signaler", "signalement", "protection", "me protéger", "sécurité",
-];
-
-function conversationTouchAuDroit(messages) {
-  const texte = messages
-    .slice(-6)
-    .map(m => String(m && (m.content || m.text) || ""))
-    .join(" ")
-    .toLowerCase();
-  return MOTS_JURIDIQUES.some(mot => texte.includes(mot));
-}
-
-const BLOC_DEMARCHES = `
-# Démarches et repères juridiques (la conversation vient d'y toucher)
-Rappel absolu, prioritaire sur tout ce qui suit : AUCUN montant, AUCUN barème, AUCUN délai, AUCUN article de loi, AUCUNE procédure précise. Tu orientes, tu ne chiffres pas et tu n'énonces pas la règle de droit.
-
-Tu peux, avec douceur et sans noyer la personne :
-- Dire que ce sont des repères généraux, jamais un conseil juridique personnalisé.
-- Rappeler que se mettre en sécurité, elle et ses enfants s'il y en a, passe avant toute démarche.
-- Lui dire qu'il est utile de documenter pendant que c'est frais : photos datées, note écrite (le journal de l'application est fait pour ça), consultation d'un médecin ou des urgences, qui peuvent établir un certificat.
-- Orienter vers les bons interlocuteurs, qui sont gratuits et dont c'est le métier : 3919 (violences conjugales, écoute anonyme), 119 (enfance en danger), 116 006 (France Victimes), CIDFF (information juridique gratuite), point-justice, avocat·e spécialisé·e, médecine du travail et inspection du travail pour le travail, 17 ou 112 en cas de danger immédiat.
-- Sur l'enregistrement ou le fait de filmer quelqu'un à son insu : dire que le statut légal est complexe et débattu en France, donc à examiner avec un·e avocat·e ou une association. Jamais "c'est permis", jamais "c'est interdit".
-
-Cette aide concrète ne vaut que rattachée à une personne ou une situation précise dont vous parlez. Si la question est générale et détachée de sa situation, tu rappelles doucement que tu n'es pas une ressource juridique générale.
-Et tu n'en parles que si elle le demande ou si la situation l'appelle vraiment : tu ne proposes pas de démarches pour un désaccord ordinaire.`;
+// Le bloc « démarches et repères juridiques » vit maintenant dans juridique.js,
+// pour pouvoir être relu et corrigé seul (voir l'en-tête de ce fichier).
 
 const app = express();
 app.use(cors());                 // autorise l'app à appeler ce serveur
@@ -130,24 +101,53 @@ const MODEL = process.env.INFOMANIAK_MODEL || "mistral24b";
 // URL de l'API d'Infomaniak (compatible OpenAI)
 const API_URL = `https://api.infomaniak.com/1/ai/${PRODUCT_ID}/openai/chat/completions`;
 
+// Les pénalités de répétition font partie du standard OpenAI, mais toutes les
+// passerelles ne les acceptent pas. On les envoie, et si l'API les refuse, on
+// retient de ne plus les envoyer du tout : aucune intervention nécessaire.
+let penalitesAcceptees = true;
+
 // Petit utilitaire : appelle l'IA d'Infomaniak avec une liste de messages
 // `model` et `maxTokens` ne servent qu'aux pages de diagnostic, qui essaient
 // un modèle sans redéployer. En usage normal, on prend les valeurs par défaut.
-async function callInfomaniak(messages, { temperature = 0.7, model = MODEL, maxTokens = 1000 } = {}) {
-  const body = {
-    model,
-    messages,
-    max_tokens: maxTokens,
-    temperature,
+async function callInfomaniak(
+  messages,
+  { temperature = 0.7, model = MODEL, maxTokens = 1000, penalites = false } = {}
+) {
+  const construireCorps = (avecPenalites) => {
+    const body = { model, messages, max_tokens: maxTokens, temperature };
+    if (avecPenalites) {
+      // Décourage la reprise mot à mot (frequency) et le ressassement des
+      // mêmes thèmes (presence). Valeurs modérées : au-delà, le style souffre.
+      body.frequency_penalty = 0.4;
+      body.presence_penalty = 0.3;
+    }
+    return body;
   };
-  const res = await fetch(API_URL, {
+
+  const envoyer = async (avecPenalites) => fetch(API_URL, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${TOKEN}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(construireCorps(avecPenalites)),
   });
+
+  const avecPenalites = penalites && penalitesAcceptees;
+  let res = await envoyer(avecPenalites);
+
+  // L'API refuse les pénalités : on réessaie sans, et on ne les renvoie plus.
+  if (!res.ok && avecPenalites && (res.status === 400 || res.status === 422)) {
+    const detail = await res.text();
+    if (/penalty|penalit/i.test(detail)) {
+      console.warn("Infomaniak n'accepte pas frequency_penalty / presence_penalty — abandon définitif de ces réglages.");
+      penalitesAcceptees = false;
+      res = await envoyer(false);
+    } else {
+      throw new Error(`Infomaniak ${res.status} : ${detail}`);
+    }
+  }
+
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`Infomaniak ${res.status} : ${detail}`);
@@ -267,6 +267,10 @@ QUE DEMANDE-T-ELLE, EXACTEMENT ? Une information ? Ton avis ? De l'écoute ? Un 
 Ta première phrase porte déjà le fond. Pas de "merci pour ce partage", pas de "je comprends que", pas de reformulation de ce qu'elle vient de dire.
 
 Tes réponses ne se ressemblent pas entre elles. Aucun plan récurrent, aucune rubrique, jamais de déroulé du type "ce que tu vis / ce que ça produit / ce que tu peux faire / veux-tu qu'on explore". Si deux de tes réponses d'affilée ont la même ossature, c'est raté : recommence autrement.
+
+Avant d'écrire, relis ce que TU as déjà répondu plus haut dans cette conversation. Tu ne réutilises aucune de tes phrases, aucune de tes formules, aucune de tes questions — même reformulées. Chaque réponse apporte quelque chose qui n'était pas là avant. Si tu n'as rien de neuf à apporter, ne meuble pas et ne recopie pas : dis-le en une phrase et demande-lui ce qu'elle veut creuser. Tourner en rond est pire que de l'admettre.
+
+Tu ne prêtes jamais à l'autre personne une parole, une réaction ou un geste qu'elle ne t'a pas rapportés. S'il n'a pas répondu, tu ne parles pas de sa réponse. S'il n'a rien dit, tu n'inventes pas ce qu'il a dit. Invente une seule fois, et toute la suite de la conversation repose sur du faux.
 
 Tu n'inventes aucune émotion et tu n'en amplifies aucune. Si un mot décrivant son état intérieur n'est pas dans SON message, il n'a rien à faire dans ta réponse. Jamais "tu te sens dépassée", "tu as l'impression de...", "ça doit être difficile", "tu as besoin de...".
 
@@ -472,6 +476,85 @@ ${msg}
 });
 
 // ============================================================
+//  Garde-fou anti-répétition du coach
+// ------------------------------------------------------------
+//  Le prompt a beau l'interdire, un modèle de taille moyenne recopie ses
+//  propres réponses précédentes : elles sont dans le contexte, juste avant
+//  la génération, et pèsent donc plus lourd que n'importe quelle consigne.
+//  On mesure donc la ressemblance après coup, et on relance une fois si la
+//  réponse est un décalque de la précédente.
+// ============================================================
+function normaliserTexte(s) {
+  return String(s || "").toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[^a-zà-ÿ' ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trigrammes(s) {
+  const mots = normaliserTexte(s).split(" ").filter(Boolean);
+  const out = new Set();
+  for (let i = 0; i + 2 < mots.length; i++) out.add(mots[i] + " " + mots[i + 1] + " " + mots[i + 2]);
+  return out;
+}
+
+// 0 = rien en commun, 1 = l'une est contenue dans l'autre.
+function similarite(a, b) {
+  const A = trigrammes(a), B = trigrammes(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  return inter / Math.min(A.size, B.size);
+}
+
+// Au-delà de ce seuil, la réponse est considérée comme un décalque.
+// Mesuré sur des échanges réels : deux réponses identiques donnent 0,97 ;
+// une reformulation de la même chose 0,53 ; deux réponses distinctes 0.
+const SEUIL_REPETITION = 0.45;
+
+// ============================================================
+//  Garde-fou anti-article-inventé
+// ------------------------------------------------------------
+//  Clarisse peut citer les articles de la liste vérifiée (juridique.js),
+//  et EUX SEULS. Si une référence apparaît dans sa réponse sans figurer
+//  dans cette liste, c'est qu'elle l'a produite de mémoire : on refuse.
+//  Une référence fausse sur ce terrain peut faire prendre une mauvaise
+//  décision à quelqu'un — mieux vaut une réponse en moins.
+// ============================================================
+const MOTIF_ARTICLE = /\b(?:art\.?|articles?)\s*[LRD]?\.?\s*\d+(?:[-–.]\d+)*\b/gi;
+
+function referencesCitees(texte) {
+  return (String(texte || "").match(MOTIF_ARTICLE) || [])
+    .map(s => s.toLowerCase().replace(/\s+/g, " ").trim());
+}
+
+// Renvoie les références citées qui ne font pas partie de celles fournies
+// pour CET échange. Volontairement strict : un texte qui existe dans le
+// fichier mais qui n'a pas été transmis n'autorise rien non plus — s'il
+// n'était pas sous ses yeux, Clarisse l'a cité de mémoire.
+function referencesNonVerifiees(texte, autorisees = []) {
+  const citees = referencesCitees(texte);
+  if (!citees.length) return [];
+  // On compare sur les seuls chiffres : « article 222-33-2-1 du Code pénal »
+  // et « art. 222-33-2-1 » doivent être reconnus comme la même référence.
+  const chiffres = s => (s.match(/\d+(?:[-–.]\d+)*/g) || []).join("|");
+  const connues = new Set(autorisees.map(r => chiffres(String(r).toLowerCase())).filter(Boolean));
+  return citees.filter(c => {
+    const n = chiffres(c);
+    return n && !connues.has(n);
+  });
+}
+
+function dernieresReponses(messages, combien = 3) {
+  return messages
+    .filter(m => m && m.role === "assistant")
+    .slice(-combien)
+    .map(m => String(m.content || m.text || ""))
+    .filter(Boolean);
+}
+
+// ============================================================
 //  ROUTE : coach (conversation)
 // ============================================================
 app.post("/api/coach", async (req, res) => {
@@ -485,7 +568,13 @@ app.post("/api/coach", async (req, res) => {
     // quand la personne parle des mêmes personnes ou situations.
     let sys = SYS_COACH;
     // Repères juridiques : ajoutés seulement quand la conversation y touche.
+    // Les articles vérifiés à la main (juridique.js) suivent le bloc général,
+    // et sont les seuls que Clarisse aura le droit de citer.
+    // Les textes de loi vérifiés sont choisis selon la question posée
+    // (voir juridique.js) : seuls ceux-là pourront ensuite être cités.
+    const { bloc: blocTextes, references: refsAutorisees } = blocReperesVerifies(messages);
     if (conversationTouchAuDroit(messages)) sys += "\n" + BLOC_DEMARCHES;
+    if (blocTextes) sys += "\n" + blocTextes;
     // Tranche d'âge déclarée par la personne, si elle a voulu la donner.
     // Le contenu de Clarisé peut être cherché légitimement par un·e
     // adolescent·e (relation toxique, violences à la maison) : on n'interdit
@@ -510,10 +599,59 @@ app.post("/api/coach", async (req, res) => {
         + String(journalNotes).slice(0, 4000);
     }
     // messages attendu : [{ role: "user"|"assistant", content: "..." }, ...]
-    const reply = await callInfomaniak([
-      { role: "system", content: sys },
-      ...messages,
-    ], { temperature: 0.7 }); // coach VIVANTE : chaleur et naturel
+    const base = [{ role: "system", content: sys }, ...messages];
+    let reply = await callInfomaniak(base, { temperature: 0.7, penalites: true }); // coach VIVANTE : chaleur et naturel
+
+    // Si la réponse décalque une réponse précédente, on relance UNE fois,
+    // en lui mettant sous les yeux ce qu'elle vient d'écrire et en montant
+    // un peu la température pour la sortir de son ornière.
+    const precedentes = dernieresReponses(messages);
+    const ressemble = precedentes.some(p => similarite(reply, p) >= SEUIL_REPETITION);
+    if (ressemble) {
+      console.warn("/api/coach : réponse trop proche d'une précédente, relance.");
+      const rappel = {
+        role: "system",
+        content:
+          "ARRÊT. Tu viens d'écrire une réponse qui reprend presque mot pour mot ce que tu as déjà dit plus haut. "
+          + "Voici tes dernières réponses, que tu ne dois EN AUCUN CAS réutiliser, même reformulées :\n\n"
+          + precedentes.map(p => "— " + p.slice(0, 600)).join("\n\n")
+          + "\n\nRecommence. Deux issues possibles, pas d'autre : soit tu apportes un élément réellement neuf "
+          + "(un angle, une information, une proposition concrète), soit tu reconnais en une phrase que tu tournes "
+          + "en rond et tu lui demandes ce qu'elle veut vraiment creuser. Ne repose pas la même question.",
+      };
+      const seconde = await callInfomaniak([...base, rappel], { temperature: 0.95, penalites: true });
+      if (seconde && seconde.trim()) reply = seconde;
+    }
+
+    // Article de loi cité qui ne figure pas dans la liste vérifiée : refusé.
+    let inventees = referencesNonVerifiees(reply, refsAutorisees);
+    if (inventees.length) {
+      console.warn(`/api/coach : référence(s) non vérifiée(s) — ${inventees.join(", ")}. Relance.`);
+      const alerte = {
+        role: "system",
+        content:
+          "ARRÊT. Ta réponse cite " + inventees.join(", ") + ", qui ne figure pas dans les repères vérifiés. "
+          + "Tu n'as pas le droit de citer un article de loi de mémoire : s'il n'est pas dans la liste fournie, "
+          + "tu ne le connais pas de façon fiable. Réécris ta réponse sans AUCUNE référence à un article, "
+          + "en disant simplement que tu n'as pas de repère fiable sur ce point précis, et en l'orientant vers "
+          + "un point-justice, le CIDFF ou un·e avocat·e. Le reste de ta réponse peut être conservé.",
+      };
+      const corrigee = await callInfomaniak([...base, alerte], { temperature: 0.4, penalites: true });
+      if (corrigee && corrigee.trim() && !referencesNonVerifiees(corrigee, refsAutorisees).length) {
+        reply = corrigee;
+      } else {
+        // Deuxième tentative encore fautive : on préfère ne rien dire sur le
+        // droit plutôt que de laisser passer une référence inventée.
+        console.error("/api/coach : référence inventée persistante, réponse remplacée.");
+        reply =
+          "Je préfère ne pas te répondre sur ce point précis : je n'ai pas de repère juridique fiable à te donner, "
+          + "et te citer un texte de mémoire te ferait plus de mal que de bien.\n\n"
+          + "Un point-justice répond à ce genre de question gratuitement, souvent sans rendez-vous. Le CIDFF aussi, "
+          + "et un·e avocat·e en première consultation.\n\n"
+          + "En revanche, je peux t'aider sur tout le reste de ta situation — dis-moi ce qui te pèse le plus en ce moment.";
+      }
+    }
+
     res.json({ reply });
   } catch (e) {
     console.error("Erreur /api/coach :", e.message);
