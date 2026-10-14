@@ -608,5 +608,39 @@ app.post("/api/coach", async (req, res) => {
 
 app.get("/", (_req, res) => res.send("Backend Clarisé (Infomaniak) en ligne."));
 
+// Page de diagnostic : à ouvrir dans un navigateur pour vérifier d'un coup d'œil
+// quel modèle tourne réellement et si les réglages sont bien lus. Aucune donnée
+// secrète n'est renvoyée : seulement des oui/non et le nom public du modèle.
+app.get("/api/sante", (_req, res) => {
+  res.json({
+    enLigne: true,
+    modele: MODEL,
+    modeleVientDeLEnvironnement: Boolean(process.env.INFOMANIAK_MODEL),
+    jetonPresent: Boolean(TOKEN),
+    identifiantProduitPresent: Boolean(PRODUCT_ID),
+  });
+});
+
+// Test réel de l'appel à Infomaniak, pour distinguer « le serveur est cassé »
+// de « Infomaniak refuse ce modèle ». Renvoie le message d'erreur exact.
+app.get("/api/sante/ia", async (_req, res) => {
+  const debut = Date.now();
+  try {
+    const r = await callInfomaniak(
+      [{ role: "user", content: "Réponds exactement : ok" }],
+      { temperature: 0 }
+    );
+    res.json({ ok: true, modele: MODEL, reponse: r, dureeMs: Date.now() - debut });
+  } catch (e) {
+    res.status(502).json({ ok: false, modele: MODEL, erreur: e.message, dureeMs: Date.now() - debut });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Backend Clarisé démarré sur le port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Backend Clarisé démarré sur le port ${PORT}`);
+  console.log(`Modèle IA utilisé : ${MODEL}`);
+  console.log(`  (depuis l'environnement : ${process.env.INFOMANIAK_MODEL ? "oui" : "NON — valeur de repli du code"})`);
+  if (!TOKEN) console.warn("ATTENTION : INFOMANIAK_TOKEN est absent.");
+  if (!PRODUCT_ID) console.warn("ATTENTION : INFOMANIAK_PRODUCT_ID est absent.");
+});
