@@ -484,10 +484,19 @@ function sansAccents(s) {
     .trim();
 }
 
+// Singulier et pluriel doivent se retrouver : l'index dit "obligation",
+// l'utilisatrice écrit "obligations". On compare donc les mots privés de
+// leur « s » final. C'est le seul rapprochement qu'on se permette : une
+// troncature plus agressive ferait correspondre n'importe quoi.
+function sansPluriel(m) {
+  return m.length > 3 && m.endsWith("s") ? m.slice(0, -1) : m;
+}
+
 function motsCleDe(entree) {
   return [...new Set(
     sansAccents(entree.motsCles).split(" ")
       .filter(m => m.length > 2 && !MOTS_IGNORES.has(m))
+      .map(sansPluriel)
   )];
 }
 
@@ -510,8 +519,8 @@ const NOMBRE_MAXIMUM = 3;
 
 function evaluerEntree(entree, conversation) {
   if (!entree.texte || !entree.texte.trim()) return null; // entrée non remplie
-  const trouves = motsCleDe(entree)
-    .filter(m => new RegExp("(^| )" + m + "( |$)").test(conversation));
+  const motsDitsParElle = new Set(conversation.split(" ").map(sansPluriel));
+  const trouves = motsCleDe(entree).filter(m => motsDitsParElle.has(m));
   if (!trouves.length) return null;
 
   const numero = (entree.source.match(/\d+(?:-\d+)*/) || [])[0];
@@ -551,7 +560,7 @@ function blocReperesVerifies(messages) {
 
   const bloc = `
 # Textes de loi vérifiés (les SEULS que tu peux citer)
-Ces textes viennent de Légifrance et ont été vérifiés à la main. Tu peux t'appuyer dessus, les citer et les expliquer en mots simples.
+Ces textes viennent de Légifrance et ont été vérifiés à la main. Ils t'ont été transmis PARCE QU'ILS CORRESPONDENT À SA QUESTION : tu dois donc t'en servir, ce n'est pas optionnel. Nomme l'article, dis en français simple ce qu'il prévoit, et précise que l'application à sa situation précise revient à un point-justice ou un·e avocat·e. Répondre « je ne peux pas te dire » alors que le texte est sous tes yeux est une faute : elle repartirait les mains vides alors que la réponse était là.
 Règle stricte, sans exception : tu ne cites AUCUN autre article, AUCUNE autre règle, AUCUN chiffre, AUCUN montant et AUCUN délai qui ne figure pas ci-dessous — même si tu crois les connaître. Si la réponse à sa question n'est pas dans ces textes, tu le dis simplement ("je n'ai pas de texte fiable là-dessus") et tu orientes. Ne complète jamais un texte d'ici avec tes propres souvenirs.
 Tu expliques en français courant plutôt que de réciter : elle a besoin de comprendre, pas d'un copier-coller. Tu peux citer une phrase exacte quand elle est décisive.
 Tu précises toujours que c'est un repère général et non un conseil pour sa situation, et qu'un point-justice, le CIDFF ou un·e avocat·e sont les seuls à pouvoir le dire pour elle.
