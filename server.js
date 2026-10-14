@@ -27,10 +27,27 @@ const express = require("express");
 const cors = require("cors");
 const { FAMILLES, MECANISMES } = require("./mecanismes");
 // Tout ce que Clarisse a le droit de dire sur le droit, l'argent et les
-// démarches est rassemblé dans ce fichier, pour pouvoir être relu seul.
-const {
-  conversationTouchAuDroit, BLOC_DEMARCHES, blocReperesVerifies,
-} = require("./juridique");
+// démarches est rassemblé dans juridique.js, pour pouvoir être relu seul.
+//
+// Ce chargement est protégé : si le fichier est absent ou mal nommé, le
+// serveur démarre quand même. L'application reste en ligne, Clarisse se
+// contente d'orienter sans citer de texte, et l'avertissement apparaît
+// dans les logs et sur /api/sante. Une donnée manquante ne doit jamais
+// mettre toute l'application par terre.
+let juridique = null;
+let erreurJuridique = null;
+try {
+  juridique = require("./juridique");
+} catch (e) {
+  erreurJuridique = e.message;
+}
+const conversationTouchAuDroit = juridique
+  ? juridique.conversationTouchAuDroit
+  : () => false;
+const BLOC_DEMARCHES = juridique ? juridique.BLOC_DEMARCHES : "";
+const blocReperesVerifies = juridique
+  ? juridique.blocReperesVerifies
+  : () => ({ bloc: "", references: [] });
 
 // ============================================================
 //  Construction des blocs de prompt à partir du référentiel
@@ -671,6 +688,11 @@ app.get("/api/sante", (_req, res) => {
     modeleVientDeLEnvironnement: Boolean(process.env.INFOMANIAK_MODEL),
     jetonPresent: Boolean(TOKEN),
     identifiantProduitPresent: Boolean(PRODUCT_ID),
+    fichierJuridiqueCharge: Boolean(juridique),
+    nombreDeTextesDeLoi: juridique && juridique.TEXTES_LOI
+      ? juridique.TEXTES_LOI.filter(t => t.texte && t.texte.trim()).length
+      : 0,
+    erreurFichierJuridique: erreurJuridique || undefined,
   });
 });
 
@@ -700,4 +722,13 @@ app.listen(PORT, () => {
   console.log(`  (depuis l'environnement : ${process.env.INFOMANIAK_MODEL ? "oui" : "NON — valeur de repli du code"})`);
   if (!TOKEN) console.warn("ATTENTION : INFOMANIAK_TOKEN est absent.");
   if (!PRODUCT_ID) console.warn("ATTENTION : INFOMANIAK_PRODUCT_ID est absent.");
+  if (juridique) {
+    const n = (juridique.TEXTES_LOI || []).filter(t => t.texte && t.texte.trim()).length;
+    console.log(`Textes de loi chargés : ${n}`);
+  } else {
+    console.warn("ATTENTION : juridique.js est introuvable — " + erreurJuridique);
+    console.warn("  L'application fonctionne, mais Clarisse ne citera AUCUN texte de loi.");
+    console.warn("  Le fichier doit s'appeler exactement « juridique.js » (tout en minuscules)");
+    console.warn("  et se trouver dans le même dossier que server.js.");
+  }
 });
