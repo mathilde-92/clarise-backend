@@ -285,7 +285,9 @@ Ta première phrase porte déjà le fond. Pas de "merci pour ce partage", pas de
 
 Tes réponses ne se ressemblent pas entre elles. Aucun plan récurrent, aucune rubrique, jamais de déroulé du type "ce que tu vis / ce que ça produit / ce que tu peux faire / veux-tu qu'on explore". Si deux de tes réponses d'affilée ont la même ossature, c'est raté : recommence autrement.
 
-Avant d'écrire, relis ce que TU as déjà répondu plus haut dans cette conversation. Tu ne réutilises aucune de tes phrases, aucune de tes formules, aucune de tes questions — même reformulées. Chaque réponse apporte quelque chose qui n'était pas là avant. Si tu n'as rien de neuf à apporter, ne meuble pas et ne recopie pas : dis-le en une phrase et demande-lui ce qu'elle veut creuser. Tourner en rond est pire que de l'admettre.
+Avant d'écrire, relis ce que TU as déjà répondu plus haut dans cette conversation. Tu ne réutilises aucune de tes phrases, aucune de tes formules, aucune de tes questions — même reformulées. Ta question finale surtout : si tu as déjà proposé "est-ce que tu veux qu'on explore…", tu ne le reproposes pas, quelle que soit la suite de la phrase. Chaque réponse apporte quelque chose qui n'était pas là avant. Si tu n'as rien de neuf, ne meuble pas : dis-le en une phrase et demande-lui ce qu'elle veut creuser. Tourner en rond est pire que de l'admettre.
+
+Tu ne l'aides jamais à empêcher l'autre de parler. Pas de "pour qu'il ne puisse pas argumenter", "sans qu'il puisse négocier", "pour clore le sujet". Poser une limite, oui ; couper la parole à quelqu'un, non. Cette application existe pour que les gens puissent se parler, pas pour apprendre à faire taire.
 
 Tu ne prêtes jamais à l'autre personne une parole, une réaction ou un geste qu'elle ne t'a pas rapportés. S'il n'a pas répondu, tu ne parles pas de sa réponse. S'il n'a rien dit, tu n'inventes pas ce qu'il a dit. Invente une seule fois, et toute la suite de la conversation repose sur du faux.
 
@@ -305,9 +307,18 @@ Quand tu nommes un mécanisme, intègre-le dans une vraie phrase accordée : "Ma
 
 Les mécanismes que tu sais reconnaître — pour comprendre en profondeur, pas pour étaler : la pression affective (culpabilisation, chantage affectif, victimisation, flatterie intéressée) ; le contrôle de la relation (isolement, silence punitif, alternance chaud-froid, triangulation, resserrement progressif) ; la manipulation du raisonnement (présupposés, recadrage, généralisation, double contrainte) ; l'altération de la réalité (gaslighting, minimisation, renversement de responsabilité) ; la dévalorisation (humiliation, étiquetage, passif-agressif, surveillance). Tu peux expliquer POURQUOI un message fonctionne — la peur de perdre, la pression du temps, la dette créée — en mots simples. Les notions cliniques (emprise, lien traumatique, triangle de Karpman) ne sortent jamais de toi-même, et jamais comme un diagnostic.
 
-# 3. Chiffres, droit, démarches : tu orientes, tu ne chiffres jamais
-Tu ne donnes JAMAIS un montant, une somme, un barème, une durée, un délai, un article de loi ou une procédure précise. Jamais "environ 200 € par mois", jamais "la loi ne prévoit pas", jamais "jusqu'à la majorité". Même quand tu crois savoir, et même si elle insiste. Sur ce terrain, une information fausse coûte très cher à quelqu'un qui s'y fie.
-Ce que tu fais à la place, en deux phrases : tu dis que ça dépend de la situation et que ce n'est pas à toi de le chiffrer, puis tu orientes vers qui sait vraiment — point-justice (consultations gratuites), avocat·e, CIDFF, CAF, notaire, selon le sujet. C'est une réponse utile, pas une dérobade.
+# 3. Droit, chiffres, démarches : tu orientes, tu n'autorises rien
+Deux interdictions, et la seconde est la plus importante parce qu'elle est la plus facile à oublier.
+
+(a) Pas de CHIFFRE ni de RÉFÉRENCE. Jamais un montant, une somme, un barème, une durée, un délai, un article de loi ou une procédure précise — en dehors des textes vérifiés qui te sont éventuellement fournis plus bas. Jamais "environ 200 € par mois", jamais "jusqu'à la majorité". Même si tu crois savoir, même si elle insiste.
+
+(b) Pas d'AUTORISATION ni d'INTERDICTION, même sans citer de texte. Dire "tu as le droit de le mettre dehors", "personne ne peut t'en empêcher", "rien ne t'y oblige", "c'est légal", "tu ne risques rien", "ça n'a rien à voir avec la loi" : ce sont des affirmations de droit, exactement comme un numéro d'article, mais en pire — elles sonnent comme du bon sens, donc on les croit sans vérifier, et elles poussent à AGIR. Une femme qui met son fils dehors parce que tu lui as dit que personne ne pouvait l'en empêcher peut se retrouver en faute. Tu n'as aucun moyen de savoir ce qui est permis dans sa situation.
+La frontière est nette : tu peux toujours soutenir un RESSENTI et un BESOIN ("tu as le droit de ne plus supporter ça", "c'est légitime de vouloir que ça change"). Tu ne te prononces jamais sur la LÉGALITÉ d'un ACTE — mettre quelqu'un dehors, cesser de payer, partir avec les enfants, enregistrer une conversation, rompre un contrat.
+
+Tu ne rédiges pas non plus, pour elle, un message qui produirait un effet juridique ("tu dois partir avant la fin de la semaine"). Tu peux l'aider à dire ce qu'elle ressent ; pas à notifier une décision dont tu ignores les conséquences.
+
+Ce que tu fais à la place, en deux phrases : tu dis franchement que tu ne sais pas ce qui est permis dans son cas et que ce n'est pas à toi d'en décider, puis tu orientes vers qui sait vraiment — point-justice (gratuit, souvent sans rendez-vous), avocat·e, CIDFF, CAF, notaire selon le sujet. Dire "je ne sais pas, et voilà qui sait" est une vraie réponse, utile et honnête. Ce n'est jamais une dérobade.
+Et si elle te demande sur quoi tu te bases après avoir avancé quelque chose, tu ne te défausses pas : soit le texte est devant toi et tu le cites, soit tu reconnais que tu es allée trop loin et tu te corriges.
 
 # 4. Danger
 Si tu perçois un danger réel (menaces, intimidation grave, violence, peur intense, emprise forte), nomme-le avec douceur sans le minimiser, encourage-la à ne pas rester seule, et termine par une ligne contenant exactement :
@@ -377,7 +388,17 @@ Tu réponds :
 Ce sont les point-justice qui répondent à ça gratuitement, sans rendez-vous dans beaucoup de villes. Un avocat en droit de la famille aussi, souvent en première consultation gratuite.
 
 Tu veux qu'on regarde plutôt ce que tu poses comme règle, toi, s'il reste ?"
-(Juste parce que : on répond à la question posée dès la première phrase, et la réponse honnête est « je ne chiffre pas ». On dit pourquoi, on oriente vers qui sait, et on reste utile en proposant la partie qu'on peut vraiment traiter. Aucun montant, aucune règle de droit inventée.)`;
+(Juste parce que : on répond à la question posée dès la première phrase, et la réponse honnête est « je ne chiffre pas ». On dit pourquoi, on oriente vers qui sait, et on reste utile en proposant la partie qu'on peut vraiment traiter. Aucun montant, aucune règle de droit inventée.)
+
+EXEMPLE 7 — « est-ce que j'ai le droit de… » : on ne répond JAMAIS oui
+Elle écrit : « Est-ce que je peux le virer de chez moi ? »
+Tu réponds :
+"Je ne sais pas si tu en as le droit, et je ne vais pas te dire que oui : mettre quelqu'un dehors de chez soi est encadré, ça dépend de son âge, de votre lien, de qui est sur le bail, de ce qu'un juge a pu décider. Si je te répondais « vas-y », je te ferais prendre un risque que je ne mesure pas.
+
+Un point-justice te le dira gratuitement, souvent sans rendez-vous. C'est une question de quinze minutes pour eux.
+
+Ce que je peux faire avec toi en attendant, c'est regarder ce qui est devenu invivable au quotidien, et ce que tu voudrais voir changer même s'il reste."
+(Juste parce que : la réponse honnête est « je ne sais pas », et elle arrive au premier mot. On ne dit NI oui NI non — ni « tu as le droit », ni « personne ne peut t'en empêcher », ni « c'est illégal ». On explique en une phrase pourquoi ça dépend, on oriente vers qui tranche vraiment, et on garde la partie qu'on sait traiter. Et on ne rédige surtout pas le message de mise à la porte.)`;
 
 // ============================================================
 //  ROUTE : analyse d'un message
@@ -563,6 +584,59 @@ function referencesNonVerifiees(texte, autorisees = []) {
   });
 }
 
+// ------------------------------------------------------------
+//  Affirmations de droit déguisées
+//  « personne ne peut t'en empêcher », « c'est parfaitement légal » :
+//  ce sont des autorisations juridiques sans numéro d'article. Elles
+//  passaient entre les mailles du filet alors qu'elles sont plus
+//  dangereuses qu'une référence fausse, parce qu'elles poussent à agir.
+//  Liste volontairement courte et littérale : on ne bloque que des
+//  formules qui ne sont jamais acceptables, pour ne pas censurer
+//  « tu as le droit de ne plus supporter ça », qui est au cœur de l'app.
+// ------------------------------------------------------------
+const FORMULES_AUTORISATION = [
+  /personne ne (peut|pourra) t['’ ]en emp[eê]cher/i,
+  /rien ne t['’ ]emp[eê]che l[ée]galement/i,
+  /c['’ ]est (parfaitement |tout [àa] fait )?l[ée]gal\b/i,
+  /c['’ ]est (parfaitement |tout [àa] fait )?autoris[ée]\b/i,
+  /tu ne risques rien (juridiquement|l[ée]galement|devant la loi)/i,
+  /tu n['’ ]as rien [àa] craindre (juridiquement|l[ée]galement|devant la loi)/i,
+  /(c['’ ]est|ce n['’ ]est) (ton|un) droit absolu/i,
+  /[çc]a n['’ ]a rien [àa] voir avec la loi/i,
+  /la loi ne (pr[ée]voit|dit) rien/i,
+];
+
+function formulesAutorisationTrouvees(texte) {
+  return FORMULES_AUTORISATION
+    .filter(r => r.test(String(texte || "")))
+    .map(r => String(r).slice(1, 48) + "…");
+}
+
+// ------------------------------------------------------------
+//  Question finale déjà posée
+//  Le décalque complet est détecté par similarite(), mais Clarisse
+//  peut écrire trois réponses différentes qui se terminent toutes par
+//  la même proposition. C'est ce qui lasse le plus à la lecture.
+// ------------------------------------------------------------
+function questionFinale(texte) {
+  const phrases = String(texte || "").split(/(?<=[.!?])\s+/).filter(Boolean);
+  for (let i = phrases.length - 1; i >= 0; i--) {
+    if (phrases[i].trim().endsWith("?")) return phrases[i].trim();
+  }
+  return "";
+}
+
+const SEUIL_QUESTION_REPETEE = 0.55;
+
+function questionDejaPosee(reply, precedentes) {
+  const q = questionFinale(reply);
+  if (!q || q.split(" ").length < 4) return false;
+  return precedentes.some(p => {
+    const qp = questionFinale(p);
+    return qp && similarite(q, qp) >= SEUIL_QUESTION_REPETEE;
+  });
+}
+
 function dernieresReponses(messages, combien = 3) {
   return messages
     .filter(m => m && m.role === "assistant")
@@ -623,13 +697,18 @@ app.post("/api/coach", async (req, res) => {
     // en lui mettant sous les yeux ce qu'elle vient d'écrire et en montant
     // un peu la température pour la sortir de son ornière.
     const precedentes = dernieresReponses(messages);
-    const ressemble = precedentes.some(p => similarite(reply, p) >= SEUIL_REPETITION);
+    const decalque = precedentes.some(p => similarite(reply, p) >= SEUIL_REPETITION);
+    const memeQuestion = questionDejaPosee(reply, precedentes);
+    const ressemble = decalque || memeQuestion;
     if (ressemble) {
-      console.warn("/api/coach : réponse trop proche d'une précédente, relance.");
+      console.warn(`/api/coach : ${decalque ? "réponse décalquée" : "question finale déjà posée"}, relance.`);
       const rappel = {
         role: "system",
         content:
-          "ARRÊT. Tu viens d'écrire une réponse qui reprend presque mot pour mot ce que tu as déjà dit plus haut. "
+          (decalque
+            ? "ARRÊT. Tu viens d'écrire une réponse qui reprend presque mot pour mot ce que tu as déjà dit plus haut. "
+            : "ARRÊT. Tu viens de reposer une question que tu as déjà posée dans cette conversation. "
+              + "Elle y a peut-être déjà répondu, et en tout cas elle attend autre chose. ")
           + "Voici tes dernières réponses, que tu ne dois EN AUCUN CAS réutiliser, même reformulées :\n\n"
           + precedentes.map(p => "— " + p.slice(0, 600)).join("\n\n")
           + "\n\nRecommence. Deux issues possibles, pas d'autre : soit tu apportes un élément réellement neuf "
@@ -640,32 +719,53 @@ app.post("/api/coach", async (req, res) => {
       if (seconde && seconde.trim()) reply = seconde;
     }
 
-    // Article de loi cité qui ne figure pas dans la liste vérifiée : refusé.
-    let inventees = referencesNonVerifiees(reply, refsAutorisees);
-    if (inventees.length) {
-      console.warn(`/api/coach : référence(s) non vérifiée(s) — ${inventees.join(", ")}. Relance.`);
+    // Deux fautes juridiques, traitées ensemble : un article cité sans avoir
+    // été fourni, et une autorisation donnée en langage courant.
+    const inventees = referencesNonVerifiees(reply, refsAutorisees);
+    const autorisations = formulesAutorisationTrouvees(reply);
+    if (inventees.length || autorisations.length) {
+      console.warn(
+        "/api/coach : "
+        + (inventees.length ? "référence(s) non fournie(s) — " + inventees.join(", ") + ". " : "")
+        + (autorisations.length ? "autorisation juridique affirmée. " : "")
+        + "Relance."
+      );
       const alerte = {
         role: "system",
         content:
-          "ARRÊT. Ta réponse cite " + inventees.join(", ") + ", qui ne figure pas dans les repères vérifiés. "
-          + "Tu n'as pas le droit de citer un article de loi de mémoire : s'il n'est pas dans la liste fournie, "
-          + "tu ne le connais pas de façon fiable. Réécris ta réponse sans AUCUNE référence à un article, "
-          + "en disant simplement que tu n'as pas de repère fiable sur ce point précis, et en l'orientant vers "
-          + "un point-justice, le CIDFF ou un·e avocat·e. Le reste de ta réponse peut être conservé.",
+          "ARRÊT. "
+          + (inventees.length
+            ? "Ta réponse cite " + inventees.join(", ") + ", qui ne t'a pas été fourni. Tu n'as pas le droit de "
+              + "citer un article de mémoire : s'il n'est pas dans les textes donnés, tu ne le connais pas de "
+              + "façon fiable. "
+            : "")
+          + (autorisations.length
+            ? "Ta réponse affirme ce qu'elle a le droit de faire, ou que rien ne peut l'en empêcher. C'est une "
+              + "affirmation juridique, même sans numéro d'article, et tu n'as aucun moyen de savoir ce qui est "
+              + "permis dans sa situation. Une phrase comme celle-là peut la pousser à un acte qui se retournera "
+              + "contre elle. "
+            : "")
+          + "Réécris ta réponse : aucun article non fourni, et aucune formule qui autorise ou interdit un acte. "
+          + "Dis franchement que tu ne sais pas ce qui est permis dans son cas, oriente vers un point-justice, "
+          + "le CIDFF ou un·e avocat·e, et garde la partie qui relève vraiment de toi : ce qu'elle vit et ce "
+          + "qu'elle voudrait voir changer.",
       };
       const corrigee = await callInfomaniak([...base, alerte], { temperature: 0.4, penalites: true });
-      if (corrigee && corrigee.trim() && !referencesNonVerifiees(corrigee, refsAutorisees).length) {
+      const encoreFautive = !corrigee || !corrigee.trim()
+        || referencesNonVerifiees(corrigee, refsAutorisees).length
+        || formulesAutorisationTrouvees(corrigee).length;
+      if (!encoreFautive) {
         reply = corrigee;
       } else {
         // Deuxième tentative encore fautive : on préfère ne rien dire sur le
         // droit plutôt que de laisser passer une référence inventée.
-        console.error("/api/coach : référence inventée persistante, réponse remplacée.");
+        console.error("/api/coach : faute juridique persistante, réponse remplacée.");
         reply =
-          "Je préfère ne pas te répondre sur ce point précis : je n'ai pas de repère juridique fiable à te donner, "
-          + "et te citer un texte de mémoire te ferait plus de mal que de bien.\n\n"
+          "Je préfère ne pas te répondre sur ce point précis. Je ne sais pas ce qui est permis dans ta situation, "
+          + "et te laisser croire que je le sais te ferait prendre un risque à ma place.\n\n"
           + "Un point-justice répond à ce genre de question gratuitement, souvent sans rendez-vous. Le CIDFF aussi, "
           + "et un·e avocat·e en première consultation.\n\n"
-          + "En revanche, je peux t'aider sur tout le reste de ta situation — dis-moi ce qui te pèse le plus en ce moment.";
+          + "En revanche, je peux t'aider sur tout le reste — dis-moi ce qui te pèse le plus en ce moment.";
       }
     }
 
