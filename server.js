@@ -123,10 +123,18 @@ const MODEL = process.env.INFOMANIAK_MODEL || "mistral24b";
 // noms complets (mistralai/Mistral-Small-4-119B-2603, Qwen/Qwen3.5-122B…).
 // Même produit, même jeton : seule l'adresse change. C'est ce qui explique
 // que deux applications d'un même compte ne voient pas les mêmes modèles.
+const BASE_INFOMANIAK = process.env.INFOMANIAK_BASE_URL || "https://api.infomaniak.com";
+
 const ADRESSES_API = {
-  "1": `https://api.infomaniak.com/1/ai/${PRODUCT_ID}/openai/chat/completions`,
-  "2": `https://api.infomaniak.com/2/ai/${PRODUCT_ID}/openai/v1/chat/completions`,
+  "1": `${BASE_INFOMANIAK}/1/ai/${PRODUCT_ID}/openai/chat/completions`,
+  "2": `${BASE_INFOMANIAK}/2/ai/${PRODUCT_ID}/openai/v1/chat/completions`,
 };
+
+// La v2 expose une vraie adresse pour lister les modèles. C'est la bonne
+// façon de connaître le catalogue — bien plus propre que l'astuce utilisée
+// pour la v1, qui consiste à demander un modèle inexistant pour lire la
+// liste dans le message d'erreur.
+const ADRESSE_MODELES_V2 = `${BASE_INFOMANIAK}/2/ai/${PRODUCT_ID}/openai/v1/models`;
 
 // On vise la v2 par défaut. Si elle ne répond pas pour ce produit, le serveur
 // bascule tout seul sur la v1 et le signale dans les logs : rien ne casse.
@@ -949,35 +957,54 @@ app.get("/api/sante/ia", async (req, res) => {
 //
 // Ensuite on interroge chaque modèle avec une question minuscule, pour
 // distinguer trois états : disponible, en panne, ou refusé.
+// Demande à Infomaniak la liste officielle des modèles (adresse v2).
+async function listerModelesV2() {
+  const r = await fetch(ADRESSE_MODELES_V2, {
+    headers: { "Authorization": `Bearer ${TOKEN}` },
+  });
+  if (!r.ok) throw new Error(`${r.status} : ${await lireErreur(r)}`);
+  const d = await r.json();
+  // Format compatible OpenAI : { data: [ { id: "..." }, … ] }
+  const liste = (d.data || d.models || []).map(m => m.id || m.name || m).filter(Boolean);
+  if (!liste.length) throw new Error("réponse sans liste de modèles");
+  return liste;
+}
+
+// Repli pour la v1, qui n'a pas d'adresse de liste : on demande exprès un
+// modèle inexistant, et Infomaniak énumère les modèles valides dans l'erreur.
+async function listerModelesV1() {
+  try {
+    await callInfomaniak(
+      [{ role: "user", content: "ping" }],
+      { model: "modele-qui-nexiste-pas", maxTokens: 5, temperature: 0, version: "1" }
+    );
+    throw new Error("un modèle inexistant a été accepté");
+  } catch (e) {
+    const m = e.message.match(/"values"\s*:\s*\[([^\]]*)\]/);
+    if (!m) throw e;
+    return JSON.parse("[" + m[1] + "]");
+  }
+}
+
 app.get("/api/modeles", async (_req, res) => {
   const debut = Date.now();
 
-  // Demande le catalogue d'une version d'API, en réclamant exprès un modèle
-  // qui n'existe pas : Infomaniak répond par une erreur qui ÉNUMÈRE les
-  // modèles autorisés. Plus fiable que n'importe quelle documentation.
-  async function catalogueDe(v) {
-    try {
-      await callInfomaniak(
-        [{ role: "user", content: "ping" }],
-        { model: "modele-qui-nexiste-pas", maxTokens: 5, temperature: 0, version: v }
-      );
-      return { version: v, etat: "inattendu : un modèle inexistant a été accepté", modeles: [] };
-    } catch (e) {
-      const m = e.message.match(/"values"\s*:\s*\[([^\]]*)\]/);
-      if (m) {
-        try { return { version: v, etat: "disponible", modeles: JSON.parse("[" + m[1] + "]") }; }
-        catch { /* on tombe plus bas */ }
-      }
-      return { version: v, etat: "ne répond pas", detail: e.message.slice(0, 160), modeles: [] };
-    }
-  }
+  const catalogues = {};
+  try { catalogues.v2 = { modeles: await listerModelesV2() }; }
+  catch (e) { catalogues.v2 = { modeles: [], erreur: e.message.slice(0, 200) }; }
+  try { catalogues.v1 = { modeles: await listerModelesV1() }; }
+  catch (e) { catalogues.v1 = { modeles: [], erreur: e.message.slice(0, 200) }; }
 
-  const [v1, v2] = await Promise.all([catalogueDe("1"), catalogueDe("2")]);
-  const meilleure = v2.modeles.length >= v1.modeles.length ? v2 : v1;
+  // On garde la version qui ouvre le plus de modèles.
+  const version = catalogues.v2.modeles.length >= catalogues.v1.modeles.length ? "2" : "1";
+  const aTester = catalogues["v" + version].modeles;
 
-  // On teste les modèles de la meilleure version, trois fois chacun.
+  // Les modèles d'« embedding » ne tiennent pas de conversation : inutile de
+  // les interroger, et les proposer à Clarisse n'aurait aucun sens.
+  const conversationnels = aTester.filter(n => !/embedding|bge_|mini_lm/i.test(n));
+
   const ESSAIS = 3;
-  const etats = await Promise.all(meilleure.modeles.map(async (nom) => {
+  const etats = await Promise.all(conversationnels.map(async (nom) => {
     const t0 = Date.now();
     const reponses = [];
     let suivies = 0, erreur = null;
@@ -985,7 +1012,7 @@ app.get("/api/modeles", async (_req, res) => {
       try {
         const r = await callInfomaniak(
           [{ role: "user", content: "Réponds exactement : ok" }],
-          { model: nom, maxTokens: 20, temperature: 0, version: meilleure.version }
+          { model: nom, maxTokens: 20, temperature: 0, version }
         );
         reponses.push(r.slice(0, 80));
         if (/^\W*ok\W*$/i.test(r)) suivies++;
@@ -1004,26 +1031,22 @@ app.get("/api/modeles", async (_req, res) => {
   res.json({
     modeleActuel: MODEL,
     modeleActuelEstDisponible: actuelOk,
-    versionApiUtilisee: versionApi,
+    versionApiRetenue: version,
+    adresseUtilisee: ADRESSES_API[version].replace(PRODUCT_ID, "⟨produit⟩"),
     avertissement: actuelOk ? undefined
       : "ATTENTION : le modèle configuré n'est pas disponible. L'application ne répond plus. "
         + "Corrige INFOMANIAK_MODEL sur Render avec un des modèles « disponible » ci-dessous.",
-    comparaisonDesDeuxApi: {
-      v1: { etat: v1.etat, nombreDeModeles: v1.modeles.length, modeles: v1.modeles },
-      v2: { etat: v2.etat, nombreDeModeles: v2.modeles.length, modeles: v2.modeles },
-      conclusion: v2.modeles.length > v1.modeles.length
-        ? "La v2 ouvre plus de modèles : c'est elle qu'il faut utiliser."
-        : (v1.modeles.length > v2.modeles.length
-            ? "La v2 ne répond pas ici ; le serveur reste sur la v1."
-            : "Les deux versions proposent la même chose."),
+    catalogues: {
+      v2: { nombre: catalogues.v2.modeles.length, modeles: catalogues.v2.modeles, erreur: catalogues.v2.erreur },
+      v1: { nombre: catalogues.v1.modeles.length, modeles: catalogues.v1.modeles, erreur: catalogues.v1.erreur },
     },
+    modelesEcartes: aTester.filter(n => !conversationnels.includes(n)),
     modeles: etats,
     aide: "« consigneSuivie » compte, sur 3 essais identiques, combien de fois le modèle "
         + "a répondu exactement « ok ». Une seule mesure ne veut rien dire : les mêmes "
         + "modèles ont donné des résultats opposés à vingt minutes d'écart. Ne choisis pas "
-        + "un modèle là-dessus, sers-t'en seulement pour repérer une instabilité. Le seul "
-        + "vrai test reste une conversation complète avec Clarisse. Pour changer de modèle : "
-        + "variable INFOMANIAK_MODEL sur Render.",
+        + "un modèle là-dessus. Le seul vrai test reste une conversation complète avec "
+        + "Clarisse. Pour changer de modèle : variable INFOMANIAK_MODEL sur Render.",
     dureeTotaleMs: Date.now() - debut,
   });
 });
