@@ -941,41 +941,63 @@ app.get("/api/modeles", async (_req, res) => {
     }
   }
 
-  // On teste chacun, en parallèle pour ne pas faire attendre.
+  // On interroge chaque modèle TROIS fois. Une seule fois ne suffit pas :
+  // à température 0, deux appels identiques devraient donner le même
+  // résultat, et ce n'est pas le cas en pratique. Un essai unique a déjà
+  // conduit à classer deux modèles dans un sens, puis dans l'autre vingt
+  // minutes plus tard. Trois essais ne font pas une mesure solide non plus,
+  // mais ils montrent l'instabilité au lieu de la masquer.
+  const ESSAIS = 3;
   const etats = await Promise.all(disponibles.map(async (nom) => {
     const t0 = Date.now();
-    try {
-      const r = await callInfomaniak(
-        [{ role: "user", content: "Réponds exactement : ok" }],
-        { model: nom, maxTokens: 20, temperature: 0 }
-      );
-      return {
-        modele: nom,
-        etat: "disponible",
-        repond: r.slice(0, 120),
-        aSuiviLaConsigne: /^\W*ok\W*$/i.test(r),
-        dureeMs: Date.now() - t0,
-      };
-    } catch (e) {
-      const panne = /503|service unavailable|indisponible/i.test(e.message);
+    const reponses = [];
+    let suivies = 0, erreur = null;
+    for (let i = 0; i < ESSAIS; i++) {
+      try {
+        const r = await callInfomaniak(
+          [{ role: "user", content: "Réponds exactement : ok" }],
+          { model: nom, maxTokens: 20, temperature: 0 }
+        );
+        reponses.push(r.slice(0, 80));
+        if (/^\W*ok\W*$/i.test(r)) suivies++;
+      } catch (e) {
+        erreur = e.message;
+        break; // inutile d'insister si le modèle ne répond pas
+      }
+    }
+    if (erreur) {
+      const panne = /503|service unavailable|indisponible/i.test(erreur);
       return {
         modele: nom,
         etat: panne ? "en panne chez Infomaniak" : "erreur",
-        detail: e.message.slice(0, 200),
+        detail: erreur.slice(0, 200),
         dureeMs: Date.now() - t0,
       };
     }
+    return {
+      modele: nom,
+      etat: "disponible",
+      consigneSuivie: suivies + "/" + ESSAIS,
+      reponses,
+      dureeMoyenneMs: Math.round((Date.now() - t0) / ESSAIS),
+    };
   }));
 
   res.json({
     modeleActuel: MODEL,
     modeleActuelEstDisponible: etats.some(e => e.modele === MODEL && e.etat === "disponible"),
+    avertissement: etats.some(e => e.modele === MODEL && e.etat === "disponible")
+      ? undefined
+      : "ATTENTION : le modèle configuré n'est pas disponible. L'application ne répond plus. "
+        + "Corrige INFOMANIAK_MODEL sur Render avec un des modèles « disponible » ci-dessous.",
     commentObtenue,
     modeles: etats,
-    aide: "« aSuiviLaConsigne » indique si le modèle a répondu exactement « ok » "
-        + "comme demandé. C'est un indice de sa capacité à respecter des consignes "
-        + "précises, ce dont Clarisse a besoin en permanence. Pour changer de modèle : "
-        + "variable INFOMANIAK_MODEL sur Render.",
+    aide: "« consigneSuivie » compte, sur 3 essais identiques, combien de fois le modèle "
+        + "a répondu exactement « ok » comme demandé. Une seule mesure ne veut rien dire : "
+        + "les mêmes modèles ont donné des résultats opposés à vingt minutes d'écart. "
+        + "Ne choisis pas un modèle là-dessus, utilise-le seulement pour repérer une "
+        + "instabilité. Le seul vrai test reste une conversation complète avec Clarisse. "
+        + "Pour changer de modèle : variable INFOMANIAK_MODEL sur Render.",
     dureeTotaleMs: Date.now() - debut,
   });
 });
