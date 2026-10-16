@@ -186,7 +186,7 @@ async function lireErreur(res) {
 // partie du budget en coulisses, et une réponse tronquée est pire que lente.
 async function callInfomaniak(
   messages,
-  { temperature = 0.7, model = MODEL, maxTokens = 2000, penalites = false, version = null } = {}
+  { temperature = 0.7, model = MODEL, maxTokens = 3000, penalites = false, version = null } = {}
 ) {
   const construireCorps = (avecPenalites) => {
     const body = { model, messages, max_tokens: maxTokens, temperature };
@@ -311,9 +311,16 @@ ${blocAnalyse()}
 
 Si utile, tu peux, dans l'explication d'une carte, mentionner en une demi-phrase simple le ressort psychologique exploité (par ex. « il joue sur la peur de perdre », « il te met sous pression du temps »), sans jargon et sans en faire une carte séparée.
 
-DÉTECTION FINE (très important) :
-- Repère TOUS les mécanismes présents, pas seulement un ou deux. Une même phrase, surtout si elle est longue, peut contenir PLUSIEURS mécanismes différents : crée une carte distincte pour chacun. Ne regroupe pas plusieurs mécanismes sous une seule carte.
+AVANT CHAQUE CARTE, VÉRIFIE DE QUI PARLE LA PHRASE :
+C'est la première chose à faire, avant même de chercher un mécanisme. Beaucoup de phrases parlent de CELUI QUI ÉCRIT, pas de la personne qui reçoit. « Ma journée n'a pas été de tout repos » parle de SA journée à lui. « J'ai monté un meuble, je pensais que des nouilles ne poseraient pas problème » raconte ce que LUI a fait, et pourquoi.
+Raconter sa propre fatigue, ses propres raisons, ses propres contraintes, c'est se justifier. Ce n'est NI un reproche, NI une manipulation, et ça ne devient jamais une carte. Pour qu'il y ait mécanisme, il faut que la phrase fasse quelque chose À la personne qui reçoit : l'accuser, la culpabiliser, nier ce qu'elle a vécu, lui dicter ce qu'elle doit penser ou ressentir.
+Test à appliquer à chaque extrait : qui est le sujet de la phrase ? Si c'est l'expéditeur parlant de lui-même, pas de carte. Confondre les deux fabrique une accusation contre quelqu'un qui se contentait de s'expliquer — et la personne qui lit cette carte y croira.
+
+DÉTECTION FINE :
+- Un message peut contenir plusieurs mécanismes différents : crée alors une carte distincte pour chacun, sans les regrouper.
+- Mais le nombre de cartes n'est pas un objectif. Zéro carte sur un message maladroit mais ordinaire est une bonne réponse. Mieux vaut trois cartes solides que six dont la moitié est tirée par les cheveux : une carte fausse fait douter la personne de sa propre lecture, et c'est exactement ce que l'application doit éviter.
 - Chaque carte cible un mécanisme précis, avec un extrait court ("quote") correspondant à ce mécanisme-là.
+- Quand le message est mal écrit, plein de fautes ou difficile à comprendre, redouble de prudence au lieu d'en ajouter. Une phrase bancale se prête à plusieurs lectures, et la plus inquiétante n'est pas la plus probable. Si tu n'es pas sûre d'avoir compris qui fait quoi, ne crée pas de carte.
 - Attention aux compliments ou paroles douces isolés au milieu d'un message négatif : ne les traite jamais comme un signe sain ; ce sont souvent de l'intermittence (chaud-froid).
 
 HISTORIQUE DU MÊME EXPÉDITEUR (à manier avec prudence) :
@@ -1012,7 +1019,11 @@ app.get("/api/modeles", async (_req, res) => {
       try {
         const r = await callInfomaniak(
           [{ role: "user", content: "Réponds exactement : ok" }],
-          { model: nom, maxTokens: 20, temperature: 0, version }
+          // Budget large : les modèles qui raisonnent (Qwen3.5, Kimi) dépensent
+          // plusieurs centaines de tokens en coulisses avant d'écrire un mot.
+          // Avec 20 tokens ils renvoyaient une réponse vide, ce qui les faisait
+          // passer à tort pour défaillants.
+          { model: nom, maxTokens: 600, temperature: 0, version }
         );
         reponses.push(r.slice(0, 80));
         if (/^\W*ok\W*$/i.test(r)) suivies++;
