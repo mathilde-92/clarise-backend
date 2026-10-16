@@ -906,6 +906,80 @@ app.get("/api/sante/ia", async (req, res) => {
   }
 });
 
+// Liste des modèles réellement disponibles sur CE produit Infomaniak, et
+// état de chacun en ce moment. À ouvrir dans un navigateur.
+//
+// Comment on obtient la liste : on demande exprès un modèle qui n'existe
+// pas. Infomaniak répond alors par une erreur 422 qui ÉNUMÈRE les modèles
+// autorisés. C'est plus fiable que n'importe quelle documentation, parce
+// que c'est l'API elle-même qui répond, pour cet abonnement précis.
+//
+// Ensuite on interroge chaque modèle avec une question minuscule, pour
+// distinguer trois états : disponible, en panne, ou refusé.
+app.get("/api/modeles", async (_req, res) => {
+  const debut = Date.now();
+
+  let disponibles = [];
+  let commentObtenue = "";
+  try {
+    await callInfomaniak(
+      [{ role: "user", content: "ping" }],
+      { model: "modele-qui-nexiste-pas", maxTokens: 5, temperature: 0 }
+    );
+    commentObtenue = "inattendu : l'API a accepté un modèle inexistant";
+  } catch (e) {
+    const m = e.message.match(/"values"\s*:\s*\[([^\]]*)\]/);
+    if (m) {
+      try {
+        disponibles = JSON.parse("[" + m[1] + "]");
+        commentObtenue = "liste énumérée par Infomaniak pour ton abonnement";
+      } catch { /* on retombe sur le repli ci-dessous */ }
+    }
+    if (!disponibles.length) {
+      disponibles = ["mistral24b", "mistral3", "qwen3"];
+      commentObtenue = "liste de secours (l'API n'a pas énuméré les modèles) — à vérifier";
+    }
+  }
+
+  // On teste chacun, en parallèle pour ne pas faire attendre.
+  const etats = await Promise.all(disponibles.map(async (nom) => {
+    const t0 = Date.now();
+    try {
+      const r = await callInfomaniak(
+        [{ role: "user", content: "Réponds exactement : ok" }],
+        { model: nom, maxTokens: 20, temperature: 0 }
+      );
+      return {
+        modele: nom,
+        etat: "disponible",
+        repond: r.slice(0, 120),
+        aSuiviLaConsigne: /^\W*ok\W*$/i.test(r),
+        dureeMs: Date.now() - t0,
+      };
+    } catch (e) {
+      const panne = /503|service unavailable|indisponible/i.test(e.message);
+      return {
+        modele: nom,
+        etat: panne ? "en panne chez Infomaniak" : "erreur",
+        detail: e.message.slice(0, 200),
+        dureeMs: Date.now() - t0,
+      };
+    }
+  }));
+
+  res.json({
+    modeleActuel: MODEL,
+    modeleActuelEstDisponible: etats.some(e => e.modele === MODEL && e.etat === "disponible"),
+    commentObtenue,
+    modeles: etats,
+    aide: "« aSuiviLaConsigne » indique si le modèle a répondu exactement « ok » "
+        + "comme demandé. C'est un indice de sa capacité à respecter des consignes "
+        + "précises, ce dont Clarisse a besoin en permanence. Pour changer de modèle : "
+        + "variable INFOMANIAK_MODEL sur Render.",
+    dureeTotaleMs: Date.now() - debut,
+  });
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Backend Clarisé démarré sur le port ${PORT}`);
