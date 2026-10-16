@@ -115,8 +115,24 @@ const PRODUCT_ID = process.env.INFOMANIAK_PRODUCT_ID;
 // l'erreur renvoyée par Infomaniak énumère les valeurs autorisées.
 const MODEL = process.env.INFOMANIAK_MODEL || "mistral24b";
 
-// URL de l'API d'Infomaniak (compatible OpenAI)
-const API_URL = `https://api.infomaniak.com/1/ai/${PRODUCT_ID}/openai/chat/completions`;
+// URL de l'API d'Infomaniak (compatible OpenAI).
+//
+// Infomaniak expose DEUX versions, et elles ne proposent pas le même
+// catalogue de modèles. La v1 ne donne accès qu'à d'anciens alias courts
+// (mistral24b, mistral3, qwen3) ; la v2 ouvre le catalogue actuel avec les
+// noms complets (mistralai/Mistral-Small-4-119B-2603, Qwen/Qwen3.5-122B…).
+// Même produit, même jeton : seule l'adresse change. C'est ce qui explique
+// que deux applications d'un même compte ne voient pas les mêmes modèles.
+const ADRESSES_API = {
+  "1": `https://api.infomaniak.com/1/ai/${PRODUCT_ID}/openai/chat/completions`,
+  "2": `https://api.infomaniak.com/2/ai/${PRODUCT_ID}/openai/v1/chat/completions`,
+};
+
+// On vise la v2 par défaut. Si elle ne répond pas pour ce produit, le serveur
+// bascule tout seul sur la v1 et le signale dans les logs : rien ne casse.
+// Pour forcer l'ancienne : variable INFOMANIAK_API_VERSION = 1.
+let versionApi = process.env.INFOMANIAK_API_VERSION === "1" ? "1" : "2";
+let basculeV1Signalee = false;
 
 // Les pénalités de répétition font partie du standard OpenAI, mais toutes les
 // passerelles ne les acceptent pas. On les envoie, et si l'API les refuse, on
@@ -162,7 +178,7 @@ async function lireErreur(res) {
 // partie du budget en coulisses, et une réponse tronquée est pire que lente.
 async function callInfomaniak(
   messages,
-  { temperature = 0.7, model = MODEL, maxTokens = 2000, penalites = false } = {}
+  { temperature = 0.7, model = MODEL, maxTokens = 2000, penalites = false, version = null } = {}
 ) {
   const construireCorps = (avecPenalites) => {
     const body = { model, messages, max_tokens: maxTokens, temperature };
@@ -175,7 +191,9 @@ async function callInfomaniak(
     return body;
   };
 
-  const envoyer = async (avecPenalites) => fetch(API_URL, {
+  // `version` n'est utilisé que par la page de diagnostic, qui compare les
+  // deux API. En usage normal on prend celle qui est active.
+  const envoyer = async (avecPenalites, v) => fetch(ADRESSES_API[v], {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${TOKEN}`,
@@ -185,7 +203,21 @@ async function callInfomaniak(
   });
 
   const avecPenalites = penalites && penalitesAcceptees;
-  let res = await envoyer(avecPenalites);
+  const vDemandee = version || versionApi;
+  let res = await envoyer(avecPenalites, vDemandee);
+
+  // La v2 n'existe pas pour ce produit : on retombe définitivement sur la v1.
+  // Seulement quand personne n'a imposé de version : un test explicite doit
+  // garder son résultat, sinon la page de diagnostic mentirait.
+  if (!res.ok && !version && vDemandee === "2" && (res.status === 404 || res.status === 400 || res.status === 405)) {
+    if (!basculeV1Signalee) {
+      console.warn("L'API v2 d'Infomaniak ne répond pas pour ce produit — bascule définitive sur la v1.");
+      console.warn("  Conséquence : seuls les anciens modèles (mistral24b, mistral3, qwen3) seront disponibles.");
+      basculeV1Signalee = true;
+    }
+    versionApi = "1";
+    res = await envoyer(avecPenalites, "1");
+  }
 
   // L'API refuse les pénalités : on réessaie sans, et on ne les renvoie plus.
   if (!res.ok && avecPenalites && (res.status === 400 || res.status === 422)) {
@@ -193,7 +225,7 @@ async function callInfomaniak(
     if (/penalty|penalit/i.test(detail)) {
       console.warn("Infomaniak n'accepte pas frequency_penalty / presence_penalty — abandon définitif de ces réglages.");
       penalitesAcceptees = false;
-      res = await envoyer(false);
+      res = await envoyer(false, versionApi);
     } else {
       throw new Error(`Infomaniak ${res.status} : ${detail}`);
     }
@@ -879,6 +911,7 @@ app.get("/api/sante", (_req, res) => {
     modeleVientDeLEnvironnement: Boolean(process.env.INFOMANIAK_MODEL),
     jetonPresent: Boolean(TOKEN),
     identifiantProduitPresent: Boolean(PRODUCT_ID),
+    versionApiInfomaniak: versionApi,
     fichierJuridiqueCharge: Boolean(juridique),
     nombreDeTextesDeLoi: juridique && juridique.TEXTES_LOI
       ? juridique.TEXTES_LOI.filter(t => t.texte && t.texte.trim()).length
@@ -919,36 +952,32 @@ app.get("/api/sante/ia", async (req, res) => {
 app.get("/api/modeles", async (_req, res) => {
   const debut = Date.now();
 
-  let disponibles = [];
-  let commentObtenue = "";
-  try {
-    await callInfomaniak(
-      [{ role: "user", content: "ping" }],
-      { model: "modele-qui-nexiste-pas", maxTokens: 5, temperature: 0 }
-    );
-    commentObtenue = "inattendu : l'API a accepté un modèle inexistant";
-  } catch (e) {
-    const m = e.message.match(/"values"\s*:\s*\[([^\]]*)\]/);
-    if (m) {
-      try {
-        disponibles = JSON.parse("[" + m[1] + "]");
-        commentObtenue = "liste énumérée par Infomaniak pour ton abonnement";
-      } catch { /* on retombe sur le repli ci-dessous */ }
-    }
-    if (!disponibles.length) {
-      disponibles = ["mistral24b", "mistral3", "qwen3"];
-      commentObtenue = "liste de secours (l'API n'a pas énuméré les modèles) — à vérifier";
+  // Demande le catalogue d'une version d'API, en réclamant exprès un modèle
+  // qui n'existe pas : Infomaniak répond par une erreur qui ÉNUMÈRE les
+  // modèles autorisés. Plus fiable que n'importe quelle documentation.
+  async function catalogueDe(v) {
+    try {
+      await callInfomaniak(
+        [{ role: "user", content: "ping" }],
+        { model: "modele-qui-nexiste-pas", maxTokens: 5, temperature: 0, version: v }
+      );
+      return { version: v, etat: "inattendu : un modèle inexistant a été accepté", modeles: [] };
+    } catch (e) {
+      const m = e.message.match(/"values"\s*:\s*\[([^\]]*)\]/);
+      if (m) {
+        try { return { version: v, etat: "disponible", modeles: JSON.parse("[" + m[1] + "]") }; }
+        catch { /* on tombe plus bas */ }
+      }
+      return { version: v, etat: "ne répond pas", detail: e.message.slice(0, 160), modeles: [] };
     }
   }
 
-  // On interroge chaque modèle TROIS fois. Une seule fois ne suffit pas :
-  // à température 0, deux appels identiques devraient donner le même
-  // résultat, et ce n'est pas le cas en pratique. Un essai unique a déjà
-  // conduit à classer deux modèles dans un sens, puis dans l'autre vingt
-  // minutes plus tard. Trois essais ne font pas une mesure solide non plus,
-  // mais ils montrent l'instabilité au lieu de la masquer.
+  const [v1, v2] = await Promise.all([catalogueDe("1"), catalogueDe("2")]);
+  const meilleure = v2.modeles.length >= v1.modeles.length ? v2 : v1;
+
+  // On teste les modèles de la meilleure version, trois fois chacun.
   const ESSAIS = 3;
-  const etats = await Promise.all(disponibles.map(async (nom) => {
+  const etats = await Promise.all(meilleure.modeles.map(async (nom) => {
     const t0 = Date.now();
     const reponses = [];
     let suivies = 0, erreur = null;
@@ -956,48 +985,45 @@ app.get("/api/modeles", async (_req, res) => {
       try {
         const r = await callInfomaniak(
           [{ role: "user", content: "Réponds exactement : ok" }],
-          { model: nom, maxTokens: 20, temperature: 0 }
+          { model: nom, maxTokens: 20, temperature: 0, version: meilleure.version }
         );
         reponses.push(r.slice(0, 80));
         if (/^\W*ok\W*$/i.test(r)) suivies++;
-      } catch (e) {
-        erreur = e.message;
-        break; // inutile d'insister si le modèle ne répond pas
-      }
+      } catch (e) { erreur = e.message; break; }
     }
     if (erreur) {
       const panne = /503|service unavailable|indisponible/i.test(erreur);
-      return {
-        modele: nom,
-        etat: panne ? "en panne chez Infomaniak" : "erreur",
-        detail: erreur.slice(0, 200),
-        dureeMs: Date.now() - t0,
-      };
+      return { modele: nom, etat: panne ? "en panne chez Infomaniak" : "erreur",
+               detail: erreur.slice(0, 160), dureeMs: Date.now() - t0 };
     }
-    return {
-      modele: nom,
-      etat: "disponible",
-      consigneSuivie: suivies + "/" + ESSAIS,
-      reponses,
-      dureeMoyenneMs: Math.round((Date.now() - t0) / ESSAIS),
-    };
+    return { modele: nom, etat: "disponible", consigneSuivie: suivies + "/" + ESSAIS,
+             reponses, dureeMoyenneMs: Math.round((Date.now() - t0) / ESSAIS) };
   }));
 
+  const actuelOk = etats.some(e => e.modele === MODEL && e.etat === "disponible");
   res.json({
     modeleActuel: MODEL,
-    modeleActuelEstDisponible: etats.some(e => e.modele === MODEL && e.etat === "disponible"),
-    avertissement: etats.some(e => e.modele === MODEL && e.etat === "disponible")
-      ? undefined
+    modeleActuelEstDisponible: actuelOk,
+    versionApiUtilisee: versionApi,
+    avertissement: actuelOk ? undefined
       : "ATTENTION : le modèle configuré n'est pas disponible. L'application ne répond plus. "
         + "Corrige INFOMANIAK_MODEL sur Render avec un des modèles « disponible » ci-dessous.",
-    commentObtenue,
+    comparaisonDesDeuxApi: {
+      v1: { etat: v1.etat, nombreDeModeles: v1.modeles.length, modeles: v1.modeles },
+      v2: { etat: v2.etat, nombreDeModeles: v2.modeles.length, modeles: v2.modeles },
+      conclusion: v2.modeles.length > v1.modeles.length
+        ? "La v2 ouvre plus de modèles : c'est elle qu'il faut utiliser."
+        : (v1.modeles.length > v2.modeles.length
+            ? "La v2 ne répond pas ici ; le serveur reste sur la v1."
+            : "Les deux versions proposent la même chose."),
+    },
     modeles: etats,
     aide: "« consigneSuivie » compte, sur 3 essais identiques, combien de fois le modèle "
-        + "a répondu exactement « ok » comme demandé. Une seule mesure ne veut rien dire : "
-        + "les mêmes modèles ont donné des résultats opposés à vingt minutes d'écart. "
-        + "Ne choisis pas un modèle là-dessus, utilise-le seulement pour repérer une "
-        + "instabilité. Le seul vrai test reste une conversation complète avec Clarisse. "
-        + "Pour changer de modèle : variable INFOMANIAK_MODEL sur Render.",
+        + "a répondu exactement « ok ». Une seule mesure ne veut rien dire : les mêmes "
+        + "modèles ont donné des résultats opposés à vingt minutes d'écart. Ne choisis pas "
+        + "un modèle là-dessus, sers-t'en seulement pour repérer une instabilité. Le seul "
+        + "vrai test reste une conversation complète avec Clarisse. Pour changer de modèle : "
+        + "variable INFOMANIAK_MODEL sur Render.",
     dureeTotaleMs: Date.now() - debut,
   });
 });
@@ -1006,6 +1032,7 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Backend Clarisé démarré sur le port ${PORT}`);
   console.log(`Modèle IA utilisé : ${MODEL}`);
+  console.log(`API Infomaniak visée : v${versionApi}  (${ADRESSES_API[versionApi]})`);
   console.log(`  (depuis l'environnement : ${process.env.INFOMANIAK_MODEL ? "oui" : "NON — valeur de repli du code"})`);
   if (!TOKEN) console.warn("ATTENTION : INFOMANIAK_TOKEN est absent.");
   if (!PRODUCT_ID) console.warn("ATTENTION : INFOMANIAK_PRODUCT_ID est absent.");
