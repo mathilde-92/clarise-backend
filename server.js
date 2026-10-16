@@ -139,6 +139,22 @@ function nettoyerReponse(texte) {
     .trim();
 }
 
+// Quand le service est en panne, Infomaniak ne renvoie pas du JSON mais une
+// page web d'excuses de plusieurs milliers de caractères. Telle quelle, elle
+// noyait les logs et rendait le diagnostic illisible. On garde donc le message
+// utile : le JSON d'erreur s'il y en a un, sinon le titre de la page.
+async function lireErreur(res) {
+  const brut = await res.text();
+  try {
+    const j = JSON.parse(brut);
+    return JSON.stringify(j).slice(0, 500);
+  } catch {
+    const titre = (brut.match(/<title>([^<]*)<\/title>/i) || [])[1];
+    if (titre) return titre.trim() + " (page d'erreur du service, pas une réponse de l'IA)";
+    return brut.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  }
+}
+
 // Petit utilitaire : appelle l'IA d'Infomaniak avec une liste de messages
 // `model` et `maxTokens` ne servent qu'aux pages de diagnostic, qui essaient
 // un modèle sans redéployer. En usage normal, on prend les valeurs par défaut.
@@ -173,7 +189,7 @@ async function callInfomaniak(
 
   // L'API refuse les pénalités : on réessaie sans, et on ne les renvoie plus.
   if (!res.ok && avecPenalites && (res.status === 400 || res.status === 422)) {
-    const detail = await res.text();
+    const detail = await lireErreur(res);
     if (/penalty|penalit/i.test(detail)) {
       console.warn("Infomaniak n'accepte pas frequency_penalty / presence_penalty — abandon définitif de ces réglages.");
       penalitesAcceptees = false;
@@ -184,8 +200,7 @@ async function callInfomaniak(
   }
 
   if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`Infomaniak ${res.status} : ${detail}`);
+    throw new Error(`Infomaniak ${res.status} : ${await lireErreur(res)}`);
   }
   const data = await res.json();
   // Format compatible OpenAI : la réponse est dans choices[0].message.content
