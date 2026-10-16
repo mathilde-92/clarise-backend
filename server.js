@@ -123,12 +123,30 @@ const API_URL = `https://api.infomaniak.com/1/ai/${PRODUCT_ID}/openai/chat/compl
 // retient de ne plus les envoyer du tout : aucune intervention nécessaire.
 let penalitesAcceptees = true;
 
+// Certains modèles (la famille Qwen notamment) « réfléchissent à voix haute »
+// avant de répondre, et livrent ce raisonnement dans la réponse, entre des
+// balises <think>…</think>. Ce n'est pas destiné à être lu : affiché tel quel
+// à une utilisatrice, c'est incompréhensible, et dans la route d'analyse ça
+// casse la lecture du JSON. On le retire systématiquement — l'opération est
+// sans effet sur les modèles qui n'en produisent pas.
+function nettoyerReponse(texte) {
+  return String(texte || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+    // Raisonnement commencé mais jamais refermé (réponse coupée par la limite
+    // de tokens) : tout ce qui suit l'ouverture est du raisonnement.
+    .replace(/<think(ing)?>[\s\S]*$/i, "")
+    .trim();
+}
+
 // Petit utilitaire : appelle l'IA d'Infomaniak avec une liste de messages
 // `model` et `maxTokens` ne servent qu'aux pages de diagnostic, qui essaient
 // un modèle sans redéployer. En usage normal, on prend les valeurs par défaut.
+// maxTokens est large : un modèle qui raisonne avant de répondre consomme une
+// partie du budget en coulisses, et une réponse tronquée est pire que lente.
 async function callInfomaniak(
   messages,
-  { temperature = 0.7, model = MODEL, maxTokens = 1000, penalites = false } = {}
+  { temperature = 0.7, model = MODEL, maxTokens = 2000, penalites = false } = {}
 ) {
   const construireCorps = (avecPenalites) => {
     const body = { model, messages, max_tokens: maxTokens, temperature };
@@ -171,7 +189,14 @@ async function callInfomaniak(
   }
   const data = await res.json();
   // Format compatible OpenAI : la réponse est dans choices[0].message.content
-  return data.choices?.[0]?.message?.content?.trim() || "";
+  const brut = data.choices?.[0]?.message?.content || "";
+  const propre = nettoyerReponse(brut);
+  // Le modèle n'a produit que du raisonnement, sans réponse : on le signale
+  // plutôt que de renvoyer une bulle vide à l'utilisatrice.
+  if (!propre && brut.trim()) {
+    console.warn("Réponse entièrement consommée par le raisonnement du modèle (aucun texte utile).");
+  }
+  return propre;
 }
 
 // ============================================================
@@ -412,6 +437,36 @@ Ce que je peux faire avec toi en attendant, c'est regarder ce qui est devenu inv
 // ============================================================
 //  ROUTE : analyse d'un message
 // ============================================================
+// Isole le premier objet JSON complet d'un texte, en comptant les accolades
+// et en ignorant celles qui sont à l'intérieur d'une chaîne de caractères.
+// Nécessaire parce que tous les modèles ne renvoient pas un JSON nu : selon
+// celui qu'on branche, il peut être entouré de ```json, précédé d'une phrase
+// ou d'un raisonnement.
+function extraireJson(texte) {
+  const t = String(texte || "").replace(/```json|```/g, "");
+  const debut = t.indexOf("{");
+  if (debut < 0) return null;
+  let profondeur = 0, dansChaine = false, echappe = false;
+  for (let i = debut; i < t.length; i++) {
+    const c = t[i];
+    if (dansChaine) {
+      if (echappe) echappe = false;
+      else if (c === "\\") echappe = true;
+      else if (c === '"') dansChaine = false;
+      continue;
+    }
+    if (c === '"') dansChaine = true;
+    else if (c === "{") profondeur++;
+    else if (c === "}") {
+      profondeur--;
+      if (profondeur === 0) {
+        try { return JSON.parse(t.slice(debut, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
 // Garde-fou déterministe : une carte ne peut citer QUE le message analysé.
 // Si l'IA produit une carte dont l'extrait vient d'ailleurs (typiquement du
 // contexte, où la personne recopie souvent l'échange complet), la carte est
@@ -500,8 +555,16 @@ ${msg}
       { role: "system", content: SYS_ANALYSE },
       { role: "user", content: user },
     ], { temperature: 0 }); // analyse STABLE : même message => même analyse
-    txt = txt.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(txt);
+    // Lecture robuste du JSON : selon le modèle, la réponse peut être
+    // entourée de ```json, précédée d'une phrase d'introduction ou d'un
+    // raisonnement. On isole donc le premier objet JSON complet du texte
+    // plutôt que de parier sur une réponse parfaitement nue.
+    const parsed = extraireJson(txt);
+    if (!parsed) {
+      console.error("/api/analyse : aucun JSON exploitable dans la réponse du modèle.");
+      console.error("  début de la réponse reçue : " + String(txt).slice(0, 200));
+      return res.status(502).json({ error: "Analyse indisponible." });
+    }
 
     // On écarte les cartes dont l'extrait ne se trouve pas dans le message analysé.
     if (Array.isArray(parsed.cards) && parsed.cards.length) {
